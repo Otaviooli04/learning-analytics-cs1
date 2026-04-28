@@ -1,6 +1,21 @@
 from fastapi import FastAPI
-from app.api.routes import router
+from fastapi.middleware.cors import CORSMiddleware
+from app.api.routes.exam import router as exam_router
+from app.api.routes.submission import router as submission_router
 
-app = FastAPI(title="Learning Analytics Project")
+app = FastAPI(title="Learning Analytics — CS1")
 
-app.include_router(router)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(exam_router)
+app.include_router(submission_router)
+
+
+@app.get("/")
+async def health_check():
+    return {"status": "online", "system": "Learning Analytics CS1"}

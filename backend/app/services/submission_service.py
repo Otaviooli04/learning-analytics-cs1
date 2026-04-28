@@ -1,14 +1,13 @@
-from app.engine.dynamic_analyzer import compile_c_code
-from app.engine.static_analyzer import extract_control_flow
-from app.engine.heuristics import classify_error
+from app.engine.evaluators.code_evaluator import evaluate_code
+from app.engine.evaluators.dissertative_evaluator import evaluate_dissertative
+from app.engine.evaluators.multiple_choice_evaluator import evaluate_multiple_choice
 
 
-def evaluate_submission(code: str) -> dict:
-    dynamic_result = compile_c_code(code)
-    static_result = extract_control_flow(code)
-    diagnosis = classify_error(dynamic_result, static_result)
-    return {
-        "dynamic": dynamic_result,
-        "static": static_result,
-        "diagnosis": diagnosis,
-    }
+def evaluate_submission(question_type: str, payload: dict) -> dict:
+    if question_type == "code":
+        return evaluate_code(payload["code"])
+    if question_type == "dissertative":
+        return evaluate_dissertative(payload["answer"], payload["rubric"])
+    if question_type == "multiple_choice":
+        return evaluate_multiple_choice(payload["answer"], payload["expected"])
+    raise ValueError(f"Tipo de questão desconhecido: {question_type}")

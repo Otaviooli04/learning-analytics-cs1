@@ -1,20 +1,25 @@
-# Sprint 1 — Core e API
+# API
 fastapi
 uvicorn[standard]
 pydantic
 python-dotenv
+python-multipart
 
-# Sprint 2 — Analisador Estático (AST)
+# Analisador estático
 pycparser
 
-# Sprint 3 — Persistência
+# Extração de documentos
+pymupdf
+python-docx
+
+# IA / LLM
+google-genai
+
+# Persistência
 sqlalchemy
 psycopg2-binary
 
-# Sprint 4 — IA
-google-genai
-
-# Sprint 5 — ML
+# ML
 scikit-learn
 umap-learn
 hdbscan
