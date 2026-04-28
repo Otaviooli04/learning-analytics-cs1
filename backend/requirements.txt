@@ -1,0 +1,22 @@
+# Sprint 1 — Core e API
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+
+# Sprint 2 — Analisador Estático (AST)
+pycparser
+
+# Sprint 3 — Persistência
+sqlalchemy
+psycopg2-binary
+
+# Sprint 4 — IA
+google-genai
+
+# Sprint 5 — ML
+scikit-learn
+umap-learn
+hdbscan
+pandas
+numpy
