@@ -1,13 +1,50 @@
+from sqlalchemy.orm import Session
 from app.engine.evaluators.code_evaluator import evaluate_code
-from app.engine.evaluators.dissertative_evaluator import evaluate_dissertative
-from app.engine.evaluators.multiple_choice_evaluator import evaluate_multiple_choice
+from app.models.orm import Question, Submission, SubmissionTestResult
 
 
-def evaluate_submission(question_type: str, payload: dict) -> dict:
-    if question_type == "code":
-        return evaluate_code(payload["code"])
-    if question_type == "dissertative":
-        return evaluate_dissertative(payload["answer"], payload["rubric"])
-    if question_type == "multiple_choice":
-        return evaluate_multiple_choice(payload["answer"], payload["expected"])
-    raise ValueError(f"Tipo de questão desconhecido: {question_type}")
+def evaluate_submission(exam_id: int, question_number: str, code: str, db: Session) -> dict:
+    question = db.query(Question).filter(
+        Question.exam_id == exam_id,
+        Question.number == question_number,
+    ).first()
+
+    if not question:
+        raise ValueError(f"Questão {question_number} não encontrada na prova {exam_id}.")
+
+    test_cases = [
+        {"input": tc.input, "expected_output": tc.expected_output}
+        for tc in question.test_cases
+    ]
+
+    result = evaluate_code(
+        code,
+        test_cases,
+        question.required_structures or [],
+        question.forbidden_structures or [],
+    )
+
+    submission = Submission(
+        question_id=question.id,
+        code=code,
+        compile_error=result["compile_error"],
+        warnings=result["warnings"],
+        all_tests_passed=result["all_tests_passed"],
+        error_category=result["diagnosis"]["error_category"],
+        pedagogical_diagnosis=result["diagnosis"]["pedagogical_diagnosis"],
+        actionable_feedback=result["diagnosis"]["actionable_feedback"],
+    )
+    db.add(submission)
+    db.flush()
+
+    for tr in result["test_results"]:
+        db.add(SubmissionTestResult(
+            submission_id=submission.id,
+            input=tr["input"],
+            expected_output=tr["expected_output"],
+            actual_output=tr["actual_output"],
+            passed=tr["passed"],
+        ))
+
+    db.commit()
+    return {"question_number": question_number, **result}

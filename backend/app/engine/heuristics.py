@@ -1,24 +1,41 @@
-def classify_error(dynamic_result: dict, static_result: dict) -> dict:
+def check_structures(found: list, required: list, forbidden: list) -> dict:
+    missing = [s for s in required if s not in found]
+    prohibited = [s for s in forbidden if s in found]
+    return {
+        "compliant": len(missing) == 0 and len(prohibited) == 0,
+        "missing_required": missing,
+        "found_forbidden": prohibited,
+    }
+
+
+def classify_error(
+    dynamic_result: dict,
+    static_result: dict,
+    required_structures: list = None,
+    forbidden_structures: list = None,
+) -> dict:
     dyn_success = dynamic_result.get("success", False)
-    message = dynamic_result.get("message", "").lower()
+    compile_error = dynamic_result.get("compile_error", "").lower()
     warnings = dynamic_result.get("warnings", "").lower()
     structures = static_result.get("structures", [])
+    test_results = dynamic_result.get("test_results", [])
+    all_passed = dynamic_result.get("all_tests_passed")
 
     if not dyn_success:
-        if "error:" in message:
-            return _classify_compilation_error(message)
+        if "error:" in compile_error:
+            return _classify_compilation_error(compile_error)
 
-        if "tempo limite excedido" in message:
+        if "timeout" in compile_error:
             return _classify_timeout(structures)
 
-        if "segmentation fault" in message or "core dumped" in message:
+        if "segmentation fault" in compile_error or "core dumped" in compile_error:
             return {
                 "error_category": "Acesso Indevido à Memória",
                 "pedagogical_diagnosis": "O programa tentou acessar uma área de memória restrita (Segmentation Fault).",
                 "actionable_feedback": "Verifique se os índices de vetores ultrapassam o limite declarado ou se há ponteiros não inicializados.",
             }
 
-        if "floating point exception" in message:
+        if "floating point exception" in compile_error:
             return {
                 "error_category": "Erro Aritmético — Divisão por Zero",
                 "pedagogical_diagnosis": "O programa executou uma divisão por zero em tempo de execução.",
@@ -30,12 +47,57 @@ def classify_error(dynamic_result: dict, static_result: dict) -> dict:
         if warning_diagnosis:
             return warning_diagnosis
 
+        req = required_structures or []
+        forb = forbidden_structures or []
+        struct_check = check_structures(structures, req, forb)
+
+        if not struct_check["compliant"]:
+            return _classify_structure_violation(struct_check)
+
+        if test_results:
+            failed = [r for r in test_results if not r["passed"]]
+            if any(r["actual_output"] == "TIMEOUT" for r in failed):
+                return _classify_timeout(structures)
+            if failed:
+                return _classify_wrong_output(failed, len(test_results))
+            return {
+                "error_category": "Correto",
+                "pedagogical_diagnosis": f"Todos os {len(test_results)} testes passaram e as estruturas estão corretas.",
+                "actionable_feedback": "Solução correta.",
+            }
+
         return _classify_success(structures)
 
     return {
         "error_category": "Erro Desconhecido",
         "pedagogical_diagnosis": "Ocorreu uma falha técnica não classificada pelas regras atuais.",
         "actionable_feedback": "Consulte os logs técnicos de execução.",
+    }
+
+
+def _classify_structure_violation(struct_check: dict) -> dict:
+    parts = []
+    if struct_check["missing_required"]:
+        parts.append(f"estruturas obrigatórias não usadas: {struct_check['missing_required']}")
+    if struct_check["found_forbidden"]:
+        parts.append(f"estruturas proibidas encontradas: {struct_check['found_forbidden']}")
+    return {
+        "error_category": "Violação de Estrutura",
+        "pedagogical_diagnosis": f"O código compilou, mas não respeita as restrições da questão — {'; '.join(parts)}.",
+        "actionable_feedback": "Revise o enunciado: verifique quais estruturas de controle são exigidas ou proibidas.",
+    }
+
+
+def _classify_wrong_output(failed: list, total: int) -> dict:
+    exemplo = failed[0]
+    return {
+        "error_category": "Saída Incorreta",
+        "pedagogical_diagnosis": (
+            f"{len(failed)}/{total} testes falharam. "
+            f"Exemplo: entrada '{exemplo['input']}' → esperado '{exemplo['expected_output']}', "
+            f"obtido '{exemplo['actual_output']}'."
+        ),
+        "actionable_feedback": "Revise a lógica do programa. Teste manualmente com as entradas indicadas e compare a saída esperada.",
     }
 
 

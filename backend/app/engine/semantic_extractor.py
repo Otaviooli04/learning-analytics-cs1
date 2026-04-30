@@ -11,30 +11,21 @@ def extract_exam_structure(raw_text: str) -> dict:
 
     prompt = f"""
 Você é um analisador de provas de programação introdutória em C.
-Leia o texto da prova abaixo e estruture cada questão identificada.
+Leia o texto da prova abaixo e extraia apenas as questões de programação (que pedem ao aluno para escrever código C).
+Ignore questões dissertativas, de múltipla escolha ou teóricas.
 
-Para cada questão, extraia:
-- "number": número ou identificador da questão
-- "type": tipo da questão — "code" | "dissertative" | "multiple_choice"
+Para cada questão de código, extraia:
+- "number": número ou identificador da questão (string)
+- "type": sempre "code"
 - "statement": enunciado completo da questão
-
-Se o tipo for "code":
-  - "required_structures": estruturas de controle exigidas (valores: "If","For","While","DoWhile","Switch")
-  - "forbidden_structures": estruturas explicitamente proibidas
-  - "requires_loop": true se o enunciado exige laço de repetição
-  - "test_cases": lista de {{ "input": "...", "expected_output": "..." }} se houver exemplos no enunciado
-
-Se o tipo for "dissertative":
-  - "rubric": critérios de correção extraídos ou inferidos do enunciado
-
-Se o tipo for "multiple_choice":
-  - "options": lista de alternativas
-  - "expected_answer": letra ou texto da alternativa correta (se indicada)
+- "required_structures": estruturas de controle exigidas — valores possíveis: "If","For","While","DoWhile","Switch" (lista vazia se não especificado)
+- "forbidden_structures": estruturas explicitamente proibidas (lista vazia se não houver)
+- "requires_loop": true se o enunciado exige laço de repetição, false caso contrário
 
 Texto da prova:
 {raw_text}
 
-Retorne apenas o JSON com a chave "questions" contendo a lista de questões.
+Retorne apenas o JSON com a chave "questions" contendo a lista de questões de código.
 """
 
     response = client.models.generate_content(
