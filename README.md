@@ -1,34 +1,48 @@
 # Learning Analytics — CS1
 
-Sistema de Learning Analytics para apoio docente em disciplinas introdutórias de programação (CS1). Analisa submissões de código C com análise estática (AST), dinâmica (execução isolada via Docker) e heurísticas pedagógicas, com clustering ML e geração de feedback via LLM (Gemini).
+Sistema de Learning Analytics para apoio docente em disciplinas introdutórias de programação (CS1). O professor faz upload de uma prova em PDF, o Gemini estrutura as questões de código, o professor adiciona test cases ocultos, e os alunos submetem código C que é compilado, executado e diagnosticado automaticamente.
 
 ## Arquitetura
 
 ```
 backend/app/
-  main.py                    — FastAPI app
-  api/routes.py              — Rotas da API REST
+  main.py
+  api/routes/
+    exam.py           — Upload de prova, gerenciamento de test cases, resultados
+    submission.py     — Avaliação de submissão de código
   engine/
-    dynamic_analyzer.py      — Compila e executa código C via Docker (--network none, timeout 5s)
-    static_analyzer.py       — Gera AST com pycparser, extrai estruturas de controle de fluxo
-    heuristics.py            — Cruza resultados dinâmico + estático → diagnóstico pedagógico
-    semantic_extractor.py    — Usa Gemini API para extrair metadados do enunciado do exercício
-  models/schemas.py          — Modelos Pydantic (CodeRequest, CompileResponse, ASTResponse)
-  llm/                       — Geração de feedback via LLM (planejado)
-  ml/                        — Clustering UMAP + HDBSCAN (planejado)
-  services/                  — Camada de serviços (exercícios, submissões)
+    document_parser.py      — Extrai texto de PDF/DOCX (pymupdf, python-docx)
+    semantic_extractor.py   — Gemini 2.5 Flash: texto → JSON de questões de código
+    dynamic_analyzer.py     — Compila C via Docker GCC, executa contra cada test case
+    static_analyzer.py      — AST via pycparser, extrai estruturas de controle
+    heuristics.py           — Diagnóstico pedagógico (estruturas + resultados dos testes)
+    evaluators/
+      code_evaluator.py     — Orquestra dynamic + static + heuristics
+  models/
+    database.py   — SQLAlchemy engine + sessão
+    orm.py        — Modelos ORM: Exam, Question, TestCase, Submission, SubmissionTestResult
+    schemas.py    — Schemas Pydantic
+  services/
+    exam_service.py       — Upload, test cases, resultados agregados
+    submission_service.py — Busca contexto do banco, avalia, persiste resultado
+  ml/cluster.py             — TF-IDF → UMAP → HDBSCAN (em desenvolvimento)
+  llm/feedback_generator.py — Feedback por cluster via Gemini (planejado)
 ```
 
-**Fluxo de dados:**
-1. **Fase 1 (Docente):** Professor insere enunciado → Gemini extrai metadados JSON (`requires_loop`, `required_structures`, `forbidden_structures`)
-2. **Fase 2 (Estudante):** `CodeRequest` → `dynamic_analyzer` (Docker GCC) + `static_analyzer` (pycparser) → `heuristics.classify_error()` → diagnóstico pedagógico → clustering → feedback LLM
+## Fluxo
+
+1. **Professor** faz upload da prova (PDF/DOCX) → Gemini extrai questões de código com estruturas obrigatórias/proibidas
+2. **Professor** adiciona test cases ocultos por questão
+3. **Aluno** submete código C → sistema compila (Docker), roda contra os test cases e analisa a AST
+4. **Professor** consulta resultados agregados por questão com distribuição de erros
 
 ## Pré-requisitos
 
 - Python 3.10+
-- Docker (rodando) — o `dynamic_analyzer.py` usa `docker run gcc:latest`
-- Node.js 18+
-- Variável de ambiente `GEMINI_API_KEY` — necessária para o `semantic_extractor.py`
+- Docker rodando — usado para compilar e executar o código C dos alunos
+- PostgreSQL 16+
+- Node.js 18+ (frontend)
+- Chave da API Gemini — [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
 
 ## Instalação
 
@@ -37,15 +51,25 @@ backend/app/
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Crie um arquivo `.env` em `backend/`:
+Crie `backend/.env`:
 
 ```env
 GEMINI_API_KEY=sua_chave_aqui
+DATABASE_URL=postgresql://usuario:senha@localhost:5432/learning_analytics
 ```
+
+### Banco de dados (PostgreSQL)
+
+```bash
+sudo -u postgres psql -c "CREATE USER analytics_user WITH PASSWORD 'analytics_pass';"
+sudo -u postgres psql -c "CREATE DATABASE learning_analytics OWNER analytics_user;"
+```
+
+As tabelas são criadas automaticamente na primeira execução do servidor.
 
 ### Frontend
 
@@ -63,40 +87,44 @@ cd backend
 source venv/bin/activate
 uvicorn app.main:app --reload
 # Disponível em http://localhost:8000
+# Swagger UI em http://localhost:8000/docs
 ```
 
 ### Frontend
 
 ```bash
 cd frontend
-npm run dev      # servidor de desenvolvimento com HMR
-npm run build    # build de produção
-npm run lint     # ESLint
+npm run dev
 ```
 
 ## API Endpoints
 
-| Método | Rota         | Descrição                                                      |
-|--------|--------------|----------------------------------------------------------------|
-| GET    | `/`          | Health check                                                   |
-| POST   | `/evaluate`  | Compila e executa código C, retorna `CompileResponse`          |
-| POST   | `/ast`       | Análise estática AST, retorna `ASTResponse` com estruturas de controle |
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/` | Health check |
+| POST | `/exam/upload` | Upload de prova PDF/DOCX → estrutura questões via Gemini |
+| GET | `/exam/{id}` | Consulta prova com contagem de test cases por questão |
+| POST | `/exam/{id}/questions/{num}/testcases` | Professor adiciona test cases ocultos |
+| GET | `/exam/{id}/results` | Resultados agregados por questão (distribuição de erros, submissões) |
+| POST | `/submission/evaluate` | Submete código C → compila, testa e diagnostica |
 
 ## Stack
 
-- **Backend:** Python 3, FastAPI, Pydantic, Uvicorn
-- **Análise estática:** pycparser
-- **Análise dinâmica:** subprocess + Docker + GCC
-- **IA/LLM:** Google Gemini API
-- **ML:** scikit-learn, UMAP, HDBSCAN
-- **Banco de dados:** PostgreSQL + SQLAlchemy (planejado)
-- **Frontend:** React + Vite
+| Camada | Tecnologia |
+|--------|-----------|
+| Backend | Python 3, FastAPI, Pydantic, Uvicorn |
+| Banco de dados | PostgreSQL 16 + SQLAlchemy |
+| Análise dinâmica | Docker + GCC |
+| Análise estática | pycparser |
+| IA / LLM | Google Gemini 2.5 Flash |
+| ML | scikit-learn, umap-learn, hdbscan (em desenvolvimento) |
+| Frontend | React + Vite |
 
 ## Estrutura de Branches
 
-| Branch              | Finalidade                          |
-|---------------------|-------------------------------------|
-| `main`              | Produção — releases estáveis        |
-| `dev`               | Integração de features              |
-| `feature/<nome>`    | Novas funcionalidades               |
-| `fix/<nome>`        | Correções de bugs                   |
+| Branch | Finalidade |
+|--------|-----------|
+| `main` | Produção — releases estáveis |
+| `dev` | Integração de features |
+| `feature/<nome>` | Novas funcionalidades |
+| `fix/<nome>` | Correções de bugs |
