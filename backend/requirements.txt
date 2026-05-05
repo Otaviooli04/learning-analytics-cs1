@@ -25,6 +25,7 @@ umap-learn
 hdbscan
 pandas
 numpy
+matplotlib
 
 # Testes
 pytest

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from app.models.database import get_db
 from app.models.orm import Exam, Question, QuestionCluster
@@ -14,7 +14,7 @@ from app.models.schemas import (
     TestCaseAddRequest,
 )
 from app.services.exam_service import process_exam_upload, add_test_cases, get_exam_results
-from app.ml.cluster import cluster_question
+from app.ml.cluster import FeatureStrategy, cluster_question
 from app.llm.feedback_generator import generate_cluster_insights
 
 router = APIRouter(prefix="/exam", tags=["exam"])
@@ -69,7 +69,12 @@ def get_results(exam_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{exam_id}/questions/{question_number}/cluster", response_model=ClusteringResponse)
-def run_clustering(exam_id: int, question_number: str, db: Session = Depends(get_db)):
+def run_clustering(
+    exam_id: int,
+    question_number: str,
+    strategy: FeatureStrategy = Query(default=FeatureStrategy.TFIDF),
+    db: Session = Depends(get_db),
+):
     question = db.query(Question).filter(
         Question.exam_id == exam_id,
         Question.number == question_number,
@@ -77,7 +82,7 @@ def run_clustering(exam_id: int, question_number: str, db: Session = Depends(get
     if not question:
         raise HTTPException(status_code=404, detail="Questão não encontrada.")
 
-    result = cluster_question(question.id, db)
+    result = cluster_question(question.id, db, strategy=strategy)
     if result is None:
         raise HTTPException(
             status_code=422,
@@ -110,6 +115,8 @@ def run_clustering(exam_id: int, question_number: str, db: Session = Depends(get
         total_submissions=len(result.scatter),
         clusters=clusters_out,
         scatter=scatter_out,
+        strategy=result.strategy.value,
+        silhouette_score=result.silhouette,
     )
 
 
