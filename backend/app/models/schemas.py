@@ -107,3 +107,25 @@ class ExamResultsResponse(BaseModel):
     exam_id: int
     filename: str
     questions: List[QuestionResults]
+
+
+class ClusterInfo(BaseModel):
+    cluster_id: int
+    size: int
+    dominant_error: str
+    representative_submission_id: Optional[int]
+    representative_code: Optional[str]
+
+
+class ScatterPoint(BaseModel):
+    submission_id: int
+    x: float
+    y: float
+    cluster_id: int
+
+
+class ClusteringResponse(BaseModel):
+    question_number: str
+    total_submissions: int
+    clusters: List[ClusterInfo]
+    scatter: List[ScatterPoint]
