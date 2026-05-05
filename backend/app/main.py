@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes.exam import router as exam_router
 from app.api.routes.submission import router as submission_router
+from app.api.routes.turma import router as turma_router
 
 app = FastAPI(title="Learning Analytics — CS1")
 
@@ -14,6 +15,7 @@ app.add_middleware(
 
 app.include_router(exam_router)
 app.include_router(submission_router)
+app.include_router(turma_router)
 
 
 @app.get("/")

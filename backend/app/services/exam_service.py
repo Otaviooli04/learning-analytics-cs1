@@ -5,11 +5,11 @@ from app.engine.semantic_extractor import extract_exam_structure
 from app.models.orm import Exam, Question, TestCase
 
 
-def process_exam_upload(file_bytes: bytes, filename: str, db: Session) -> Exam:
+def process_exam_upload(file_bytes: bytes, filename: str, db: Session, turma_id=None) -> Exam:
     raw_text = parse_document(file_bytes, filename)
     structure = extract_exam_structure(raw_text)
 
-    exam = Exam(filename=filename, raw_text=raw_text)
+    exam = Exam(filename=filename, raw_text=raw_text, turma_id=turma_id)
     db.add(exam)
     db.flush()
 

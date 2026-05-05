@@ -1,4 +1,5 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Query
+from typing import Optional
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from app.models.database import get_db
 from app.models.orm import Exam, Question, QuestionCluster
@@ -21,12 +22,16 @@ router = APIRouter(prefix="/exam", tags=["exam"])
 
 
 @router.post("/upload", response_model=ExamResponse)
-async def upload_exam(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_exam(
+    file: UploadFile = File(...),
+    turma_id: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+):
     if not file.filename.endswith((".pdf", ".docx", ".doc")):
         raise HTTPException(status_code=400, detail="Formato inválido. Envie PDF ou DOCX.")
     file_bytes = await file.read()
     try:
-        exam = process_exam_upload(file_bytes, file.filename, db)
+        exam = process_exam_upload(file_bytes, file.filename, db, turma_id=turma_id)
         return _exam_to_response(exam)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -159,10 +164,47 @@ def run_insights(exam_id: int, question_number: str, db: Session = Depends(get_d
     )
 
 
+@router.get("/{exam_id}/questions/{question_number}/submissions")
+def get_question_submissions(exam_id: int, question_number: str, db: Session = Depends(get_db)):
+    question = db.query(Question).filter(
+        Question.exam_id == exam_id,
+        Question.number == question_number,
+    ).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Questão não encontrada.")
+    return {
+        "question_number": question_number,
+        "statement": question.statement,
+        "submissions": [
+            {
+                "id": s.id,
+                "student_name": s.student_name,
+                "code": s.code,
+                "compile_error": s.compile_error or "",
+                "warnings": s.warnings or "",
+                "all_tests_passed": s.all_tests_passed,
+                "error_category": s.error_category or "",
+                "pedagogical_diagnosis": s.pedagogical_diagnosis or "",
+                "actionable_feedback": s.actionable_feedback or "",
+                "test_results": [
+                    {"input": tr.input, "expected_output": tr.expected_output,
+                     "actual_output": tr.actual_output, "passed": tr.passed}
+                    for tr in s.test_results
+                ],
+                "submitted_at": s.submitted_at.isoformat(),
+            }
+            for s in question.submissions
+        ],
+    }
+
+
 def _exam_to_response(exam: Exam) -> ExamResponse:
     return ExamResponse(
         id=exam.id,
         filename=exam.filename,
+        created_at=exam.created_at.isoformat() if exam.created_at else "",
+        turma_id=exam.turma_id,
+        turma_nome=exam.turma.nome if exam.turma else None,
         questions=[
             QuestionResponse(
                 id=q.id,

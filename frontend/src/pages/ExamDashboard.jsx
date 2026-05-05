@@ -30,6 +30,16 @@ export default function ExamDashboard() {
 
   return (
     <div>
+      {exam.turma_id ? (
+        <div className="flex items-center gap-2 text-sm text-gray-400 mb-2">
+          <Link to="/" className="hover:text-gray-600">Turmas</Link>
+          <span>›</span>
+          <Link to={`/turma/${exam.turma_id}`} className="hover:text-gray-600">{exam.turma_nome}</Link>
+          <span>›</span>
+          <span className="text-gray-600">{exam.filename}</span>
+        </div>
+      ) : null}
+
       <div className="flex items-center justify-between mb-6">
         <div>
           <p className="text-xs text-gray-400 mb-0.5">Prova #{id}</p>
@@ -111,6 +121,12 @@ export default function ExamDashboard() {
                   className="text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
                 >
                   + Test cases
+                </Link>
+                <Link
+                  to={`/exam/${id}/questions/${q.number}/submissions`}
+                  className="text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Respostas
                 </Link>
                 <Link
                   to={`/exam/${id}/questions/${q.number}/cluster`}

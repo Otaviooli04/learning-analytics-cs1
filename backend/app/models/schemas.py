@@ -2,6 +2,35 @@ from pydantic import BaseModel
 from typing import List, Optional, Literal
 
 
+class TurmaCreate(BaseModel):
+    nome: str
+    codigo: str
+
+
+class ExamSummary(BaseModel):
+    id: int
+    filename: str
+    created_at: str
+    question_count: int
+    submission_count: int
+
+
+class TurmaResponse(BaseModel):
+    id: int
+    nome: str
+    codigo: str
+    created_at: str
+    exam_count: int
+
+
+class TurmaDetailResponse(BaseModel):
+    id: int
+    nome: str
+    codigo: str
+    created_at: str
+    exams: List[ExamSummary]
+
+
 class TestCase(BaseModel):
     input: str
     expected_output: str
@@ -48,6 +77,7 @@ class CodeSubmissionRequest(BaseModel):
     exam_id: int
     question_number: str
     code: str
+    student_name: Optional[str] = None
 
 
 class CodeSubmissionResponse(BaseModel):
@@ -77,7 +107,16 @@ class QuestionResponse(BaseModel):
 class ExamResponse(BaseModel):
     id: int
     filename: str
+    created_at: str
+    turma_id: Optional[int] = None
+    turma_nome: Optional[str] = None
     questions: List[QuestionResponse]
+
+
+class QuestionSubmissionsResponse(BaseModel):
+    question_number: str
+    statement: str
+    submissions: List[SubmissionResult]
 
 
 class SubmissionResult(BaseModel):
@@ -87,6 +126,8 @@ class SubmissionResult(BaseModel):
     compile_error: str
     diagnosis: DiagnosisResult
     submitted_at: str
+    student_name: Optional[str] = None
+    test_results: List[TestResult] = []
 
 
 class ErrorCount(BaseModel):

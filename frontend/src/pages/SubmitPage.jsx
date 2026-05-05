@@ -9,6 +9,7 @@ export default function SubmitPage() {
   const [exam, setExam] = useState(null)
   const [selectedQuestion, setSelectedQuestion] = useState('')
   const [code, setCode] = useState('')
+  const [studentName, setStudentName] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
@@ -26,7 +27,7 @@ export default function SubmitPage() {
     setResult(null)
     setError('')
     try {
-      const { data } = await submitCode(id, selectedQuestion, code)
+      const { data } = await submitCode(id, selectedQuestion, code, studentName)
       setResult(data)
     } catch (e) {
       setError(e.response?.data?.detail || 'Erro ao avaliar o código.')
@@ -55,6 +56,17 @@ export default function SubmitPage() {
       <h1 className="text-xl font-semibold text-gray-900 mb-6">Testar submissão</h1>
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-gray-500 mb-1.5">Nome do aluno</label>
+          <input
+            type="text"
+            value={studentName}
+            onChange={e => setStudentName(e.target.value)}
+            placeholder="Ex: João Silva"
+            className="w-full text-sm rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+        </div>
+
         <div className="mb-4">
           <label className="block text-xs font-medium text-gray-500 mb-1.5">Questão</label>
           <select

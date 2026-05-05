@@ -4,6 +4,17 @@ from sqlalchemy.orm import relationship
 from app.models.database import Base
 
 
+class Turma(Base):
+    __tablename__ = "turmas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String, nullable=False)
+    codigo = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    exams = relationship("Exam", back_populates="turma")
+
+
 class Exam(Base):
     __tablename__ = "exams"
 
@@ -11,8 +22,10 @@ class Exam(Base):
     filename = Column(String)
     raw_text = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
+    turma_id = Column(Integer, ForeignKey("turmas.id"), nullable=True)
 
     questions = relationship("Question", back_populates="exam", cascade="all, delete-orphan")
+    turma = relationship("Turma", back_populates="exams")
 
 
 class Question(Base):
@@ -58,6 +71,7 @@ class Submission(Base):
     cluster_id = Column(Integer, nullable=True)
     umap_x = Column(String, nullable=True)
     umap_y = Column(String, nullable=True)
+    student_name = Column(String, nullable=True)
     submitted_at = Column(DateTime, default=datetime.utcnow)
 
     question = relationship("Question", back_populates="submissions")

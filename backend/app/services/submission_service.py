@@ -3,7 +3,7 @@ from app.engine.evaluators.code_evaluator import evaluate_code
 from app.models.orm import Question, Submission, SubmissionTestResult
 
 
-def evaluate_submission(exam_id: int, question_number: str, code: str, db: Session) -> dict:
+def evaluate_submission(exam_id: int, question_number: str, code: str, db: Session, student_name=None) -> dict:
     question = db.query(Question).filter(
         Question.exam_id == exam_id,
         Question.number == question_number,
@@ -34,6 +34,7 @@ def evaluate_submission(exam_id: int, question_number: str, code: str, db: Sessi
         pedagogical_diagnosis=result["diagnosis"]["pedagogical_diagnosis"],
         actionable_feedback=result["diagnosis"]["actionable_feedback"],
         ast_structures=result.get("ast_structures", []),
+        student_name=student_name,
     )
     db.add(submission)
     db.flush()
