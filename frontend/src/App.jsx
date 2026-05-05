@@ -11,11 +11,13 @@ import TurmaListPage from './pages/TurmaListPage'
 import TurmaDetailPage from './pages/TurmaDetailPage'
 import ExamUploadPage from './pages/ExamUploadPage'
 import SubmissionsPage from './pages/SubmissionsPage'
+import StudentSubmitPage from './pages/StudentSubmitPage'
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="submit/:examId" element={<StudentSubmitPage />} />
         <Route element={<Layout />}>
           <Route index element={<TurmaListPage />} />
           <Route path="turma/:turmaId" element={<TurmaDetailPage />} />

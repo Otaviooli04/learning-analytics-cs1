@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { getExam, getResults } from '../api/exam'
 import Spinner from '../components/Spinner'
 import Badge from '../components/Badge'
@@ -11,6 +11,13 @@ export default function ExamDashboard() {
   const [results, setResults] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  const copyStudentLink = () => {
+    navigator.clipboard.writeText(`${window.location.origin}/submit/${id}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   useEffect(() => {
     Promise.all([getExam(id), getResults(id).catch(() => null)])
@@ -46,6 +53,15 @@ export default function ExamDashboard() {
           <h1 className="text-xl font-semibold text-gray-900">{exam.filename}</h1>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={copyStudentLink}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+            </svg>
+            {copied ? 'Link copiado!' : 'Link para alunos'}
+          </button>
           <Link
             to={`/exam/${id}/submit`}
             className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
