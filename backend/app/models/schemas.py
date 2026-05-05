@@ -129,6 +129,8 @@ class ClusteringResponse(BaseModel):
     total_submissions: int
     clusters: List[ClusterInfo]
     scatter: List[ScatterPoint]
+    strategy: str
+    silhouette_score: Optional[float] = None
 
 
 class ClusterInsight(BaseModel):

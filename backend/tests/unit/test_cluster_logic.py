@@ -1,36 +1,49 @@
 import numpy as np
 import pytest
+from unittest.mock import MagicMock
 
 from app.ml.cluster import (
+    FeatureStrategy,
     _build_features,
     _dominant_error,
     _find_representative,
 )
 
 
+def _make_subs(n):
+    subs = []
+    for _ in range(n):
+        s = MagicMock()
+        s.error_category = "Correto"
+        s.compile_error = False
+        s.test_results = []
+        subs.append(s)
+    return subs
+
+
 class TestBuildFeatures:
     def test_shape_correto(self):
         codes = ["int main(){return 0;}", "int x=1; while(x){x--;}", "int main(){}"]
         asts = [["If"], ["While"], []]
-        features = _build_features(codes, asts)
+        features = _build_features(codes, asts, _make_subs(3), FeatureStrategy.TFIDF)
         assert features.shape[0] == 3
 
     def test_retorna_float32(self):
         codes = ["int main(){}", "int x;"]
         asts = [[], []]
-        features = _build_features(codes, asts)
+        features = _build_features(codes, asts, _make_subs(2), FeatureStrategy.TFIDF)
         assert features.dtype == np.float32
 
     def test_ast_vazia_nao_quebra(self):
         codes = ["int main(){return 0;}"] * 3
         asts = [[], [], []]
-        features = _build_features(codes, asts)
+        features = _build_features(codes, asts, _make_subs(3), FeatureStrategy.TFIDF)
         assert features.shape[0] == 3
 
     def test_codigos_diferentes_geram_vetores_diferentes(self):
         codes = ["int main(){return 0;}", "while(1){ printf(42); }"]
         asts = [[], ["While"]]
-        features = _build_features(codes, asts)
+        features = _build_features(codes, asts, _make_subs(2), FeatureStrategy.TFIDF)
         assert not np.array_equal(features[0], features[1])
 
 
