@@ -54,10 +54,28 @@ class Submission(Base):
     error_category = Column(String, default="")
     pedagogical_diagnosis = Column(Text, default="")
     actionable_feedback = Column(Text, default="")
+    ast_structures = Column(JSON, default=list)
+    cluster_id = Column(Integer, nullable=True)
+    umap_x = Column(String, nullable=True)
+    umap_y = Column(String, nullable=True)
     submitted_at = Column(DateTime, default=datetime.utcnow)
 
     question = relationship("Question", back_populates="submissions")
     test_results = relationship("SubmissionTestResult", back_populates="submission", cascade="all, delete-orphan")
+
+
+class QuestionCluster(Base):
+    __tablename__ = "question_clusters"
+
+    id = Column(Integer, primary_key=True, index=True)
+    question_id = Column(Integer, ForeignKey("questions.id"))
+    cluster_label = Column(Integer)
+    size = Column(Integer)
+    dominant_error = Column(String, default="")
+    representative_submission_id = Column(Integer, ForeignKey("submissions.id"), nullable=True)
+
+    question = relationship("Question")
+    representative = relationship("Submission", foreign_keys=[representative_submission_id])
 
 
 class SubmissionTestResult(Base):

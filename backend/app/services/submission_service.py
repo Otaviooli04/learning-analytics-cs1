@@ -33,6 +33,7 @@ def evaluate_submission(exam_id: int, question_number: str, code: str, db: Sessi
         error_category=result["diagnosis"]["error_category"],
         pedagogical_diagnosis=result["diagnosis"]["pedagogical_diagnosis"],
         actionable_feedback=result["diagnosis"]["actionable_feedback"],
+        ast_structures=result.get("ast_structures", []),
     )
     db.add(submission)
     db.flush()
