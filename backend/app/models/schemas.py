@@ -129,3 +129,15 @@ class ClusteringResponse(BaseModel):
     total_submissions: int
     clusters: List[ClusterInfo]
     scatter: List[ScatterPoint]
+
+
+class ClusterInsight(BaseModel):
+    cluster_id: int
+    size: int
+    dominant_error: str
+    insight: str
+
+
+class InsightsResponse(BaseModel):
+    question_number: str
+    insights: List[ClusterInsight]

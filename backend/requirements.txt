@@ -25,3 +25,8 @@ umap-learn
 hdbscan
 pandas
 numpy
+
+# Testes
+pytest
+pytest-mock
+httpx
