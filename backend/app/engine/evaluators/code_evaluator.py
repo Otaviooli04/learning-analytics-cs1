@@ -23,4 +23,5 @@ def evaluate_code(code: str, test_cases: list = None, required_structures: list 
         "all_tests_passed": dynamic_result.get("all_tests_passed"),
         "structure_check": structure_check,
         "diagnosis": diagnosis,
+        "ast_structures": static_result.get("structures", []),
     }
