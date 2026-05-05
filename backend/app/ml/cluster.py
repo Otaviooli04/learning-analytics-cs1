@@ -35,8 +35,16 @@ def cluster_question(question_id: int, db: Session) -> ClusteringResult | None:
 
     features = _build_features(codes, ast_lists)
 
-    umap_cluster = UMAP(n_components=5, random_state=42, min_dist=0.0)
-    umap_viz = UMAP(n_components=2, random_state=42)
+    n = len(submissions)
+    n_components_cluster = min(5, n - 1)
+    n_neighbors = min(15, n - 1)
+    # init espectral falha com datasets pequenos — random é seguro em qualquer tamanho
+    umap_init = "random" if n < 10 else "spectral"
+
+    umap_cluster = UMAP(n_components=n_components_cluster, n_neighbors=n_neighbors,
+                        random_state=42, min_dist=0.0, init=umap_init)
+    umap_viz = UMAP(n_components=2, n_neighbors=n_neighbors,
+                    random_state=42, init=umap_init)
 
     embedded_cluster = umap_cluster.fit_transform(features)
     embedded_viz = umap_viz.fit_transform(features)

@@ -5,14 +5,17 @@ from app.models.orm import Exam, Question, QuestionCluster
 from app.models.schemas import (
     ClusterInfo,
     ClusteringResponse,
+    ClusterInsight,
     ExamResponse,
     ExamResultsResponse,
+    InsightsResponse,
     QuestionResponse,
     ScatterPoint,
     TestCaseAddRequest,
 )
 from app.services.exam_service import process_exam_upload, add_test_cases, get_exam_results
 from app.ml.cluster import cluster_question
+from app.llm.feedback_generator import generate_cluster_insights
 
 router = APIRouter(prefix="/exam", tags=["exam"])
 
@@ -107,6 +110,45 @@ def run_clustering(exam_id: int, question_number: str, db: Session = Depends(get
         total_submissions=len(result.scatter),
         clusters=clusters_out,
         scatter=scatter_out,
+    )
+
+
+@router.post("/{exam_id}/questions/{question_number}/insights", response_model=InsightsResponse)
+def run_insights(exam_id: int, question_number: str, db: Session = Depends(get_db)):
+    question = db.query(Question).filter(
+        Question.exam_id == exam_id,
+        Question.number == question_number,
+    ).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Questão não encontrada.")
+
+    clusters_db = db.query(QuestionCluster).filter(
+        QuestionCluster.question_id == question.id
+    ).all()
+    if not clusters_db:
+        raise HTTPException(
+            status_code=422,
+            detail="Nenhum cluster encontrado. Execute o clustering antes de gerar insights.",
+        )
+
+    clusters_payload = [
+        {
+            "cluster_id": qc.cluster_label,
+            "size": qc.size,
+            "dominant_error": qc.dominant_error,
+            "representative_code": qc.representative.code if qc.representative else "",
+        }
+        for qc in clusters_db
+    ]
+
+    try:
+        raw_insights = generate_cluster_insights(question.statement, clusters_payload)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    return InsightsResponse(
+        question_number=question_number,
+        insights=[ClusterInsight(**i) for i in raw_insights],
     )
 
 
