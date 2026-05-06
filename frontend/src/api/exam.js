@@ -20,13 +20,21 @@ export const runClustering = (examId, questionNumber, strategy) =>
 export const runInsights = (examId, questionNumber) =>
   api.post(`/exam/${examId}/questions/${questionNumber}/insights`)
 
-export const submitCode = (examId, questionNumber, code, studentName = '') =>
+export const submitCode = (examId, questionNumber, code, studentName = '', dryRun = false) =>
   api.post('/submission/evaluate', {
     exam_id: Number(examId),
     question_number: questionNumber,
     code,
     student_name: studentName || null,
+    dry_run: dryRun,
   })
+
+export const bulkSubmit = (examId, file, format) => {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('format', format)
+  return api.post(`/exam/${examId}/submissions/bulk`, form)
+}
 
 export const createTurma = (nome, codigo) =>
   api.post('/turmas', { nome, codigo })

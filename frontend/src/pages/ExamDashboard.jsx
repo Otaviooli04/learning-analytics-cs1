@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { getExam, getResults } from '../api/exam'
 import Spinner from '../components/Spinner'
 import Badge from '../components/Badge'
@@ -70,6 +70,15 @@ export default function ExamDashboard() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V7.5l-4.5-4.5h-9.75A2.25 2.25 0 003.75 5.25v12.75A2.25 2.25 0 006 20.25z" />
             </svg>
             Testar submissão
+          </Link>
+          <Link
+            to={`/exam/${id}/bulk-submit`}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 8.25H7.5a2.25 2.25 0 00-2.25 2.25v9a2.25 2.25 0 002.25 2.25h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25H15M9 12l3 3m0 0l3-3m-3 3V2.25" />
+            </svg>
+            Submissões em lote
           </Link>
           <Link
             to={`/exam/${id}/results`}

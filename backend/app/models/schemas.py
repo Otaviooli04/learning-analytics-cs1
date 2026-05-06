@@ -78,6 +78,22 @@ class CodeSubmissionRequest(BaseModel):
     question_number: str
     code: str
     student_name: Optional[str] = None
+    dry_run: bool = False
+
+
+class BulkSubmissionItem(BaseModel):
+    student: str
+    question: Optional[str]
+    file: str
+    status: str
+    message: str
+
+
+class BulkSubmissionResponse(BaseModel):
+    total: int
+    processed: int
+    errors: int
+    items: List[BulkSubmissionItem]
 
 
 class CodeSubmissionResponse(BaseModel):

@@ -3,7 +3,7 @@ from app.engine.evaluators.code_evaluator import evaluate_code
 from app.models.orm import Question, Submission, SubmissionTestResult
 
 
-def evaluate_submission(exam_id: int, question_number: str, code: str, db: Session, student_name=None) -> dict:
+def evaluate_submission(exam_id: int, question_number: str, code: str, db: Session, student_name=None, dry_run=False) -> dict:
     question = db.query(Question).filter(
         Question.exam_id == exam_id,
         Question.number == question_number,
@@ -23,6 +23,9 @@ def evaluate_submission(exam_id: int, question_number: str, code: str, db: Sessi
         question.required_structures or [],
         question.forbidden_structures or [],
     )
+
+    if dry_run:
+        return {"question_number": question_number, **result}
 
     submission = Submission(
         question_id=question.id,

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.database import get_db
 from app.models.orm import Exam, Question, QuestionCluster, TestCase as TestCaseORM
 from app.models.schemas import (
+    BulkSubmissionResponse,
     ClusterInfo,
     ClusteringResponse,
     ClusterInsight,
@@ -17,6 +18,7 @@ from app.models.schemas import (
     TestCaseUpdateRequest,
 )
 from app.services.exam_service import process_exam_upload, add_test_cases, get_exam_results
+from app.services.bulk_submission_service import process_bulk_zip
 from app.ml.cluster import FeatureStrategy, cluster_question
 from app.llm.feedback_generator import generate_cluster_insights
 
@@ -130,6 +132,30 @@ def delete_question_testcase(
 
     db.delete(tc)
     db.commit()
+
+
+@router.post("/{exam_id}/submissions/bulk", response_model=BulkSubmissionResponse)
+async def bulk_submit(
+    exam_id: int,
+    file: UploadFile = File(...),
+    format: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    if not file.filename.endswith('.zip'):
+        raise HTTPException(status_code=400, detail="Envie um arquivo .zip.")
+    if format not in ('by_student', 'by_question'):
+        raise HTTPException(status_code=400, detail="format deve ser 'by_student' ou 'by_question'.")
+
+    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Prova não encontrada.")
+
+    zip_bytes = await file.read()
+    try:
+        result = process_bulk_zip(zip_bytes, exam_id, format, db)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erro ao processar ZIP: {e}")
+    return result
 
 
 @router.get("/{exam_id}/results", response_model=ExamResultsResponse)

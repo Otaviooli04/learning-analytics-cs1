@@ -27,7 +27,7 @@ export default function SubmitPage() {
     setResult(null)
     setError('')
     try {
-      const { data } = await submitCode(id, selectedQuestion, code, studentName)
+      const { data } = await submitCode(id, selectedQuestion, code, studentName, true)
       setResult(data)
     } catch (e) {
       setError(e.response?.data?.detail || 'Erro ao avaliar o código.')
