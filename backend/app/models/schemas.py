@@ -157,6 +157,48 @@ class QuestionSubmissionsResponse(BaseModel):
     submissions: List[SubmissionResult]
 
 
+class StudentQuestionStatus(BaseModel):
+    question_number: str
+    submission_id: Optional[int]
+    passed: Optional[bool]
+    error_category: Optional[str]
+
+
+class StudentSummary(BaseModel):
+    name: str
+    questions: List[StudentQuestionStatus]
+    answered_count: int
+    passed_count: int
+    total_questions: int
+
+
+class ExamStudentsResponse(BaseModel):
+    question_numbers: List[str]
+    students: List[StudentSummary]
+
+
+class StudentSubmissionDetail(BaseModel):
+    question_number: str
+    statement: str
+    submission_id: Optional[int]
+    code: Optional[str]
+    all_tests_passed: Optional[bool]
+    compile_error: str
+    error_category: str
+    pedagogical_diagnosis: str
+    actionable_feedback: str
+    submitted_at: Optional[str]
+    test_results: List[TestResult]
+
+
+class StudentDetailResponse(BaseModel):
+    student_name: str
+    total_questions: int
+    passed_count: int
+    answered_count: int
+    submissions: List[StudentSubmissionDetail]
+
+
 class ErrorCount(BaseModel):
     error_category: str
     count: int

@@ -10,14 +10,16 @@ from app.models.schemas import (
     ClusterInsight,
     ExamResponse,
     ExamResultsResponse,
+    ExamStudentsResponse,
     InsightsResponse,
     QuestionResponse,
     ScatterPoint,
+    StudentDetailResponse,
     TestCaseAddRequest,
     TestCaseResponse,
     TestCaseUpdateRequest,
 )
-from app.services.exam_service import process_exam_upload, add_test_cases, get_exam_results
+from app.services.exam_service import process_exam_upload, add_test_cases, get_exam_results, get_exam_students, get_student_detail
 from app.services.bulk_submission_service import process_bulk_zip
 from app.ml.cluster import FeatureStrategy, cluster_question
 from app.llm.feedback_generator import generate_cluster_insights
@@ -156,6 +158,22 @@ async def bulk_submit(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao processar ZIP: {e}")
     return result
+
+
+@router.get("/{exam_id}/students", response_model=ExamStudentsResponse)
+def get_students(exam_id: int, db: Session = Depends(get_db)):
+    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Prova não encontrada.")
+    return get_exam_students(exam)
+
+
+@router.get("/{exam_id}/students/detail", response_model=StudentDetailResponse)
+def get_student(exam_id: int, name: str = Query(...), db: Session = Depends(get_db)):
+    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Prova não encontrada.")
+    return get_student_detail(exam, name)
 
 
 @router.get("/{exam_id}/results", response_model=ExamResultsResponse)

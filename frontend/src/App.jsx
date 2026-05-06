@@ -13,6 +13,8 @@ import ExamUploadPage from './pages/ExamUploadPage'
 import SubmissionsPage from './pages/SubmissionsPage'
 import StudentSubmitPage from './pages/StudentSubmitPage'
 import BulkSubmitPage from './pages/BulkSubmitPage'
+import StudentsPage from './pages/StudentsPage'
+import StudentDetailPage from './pages/StudentDetailPage'
 
 export default function App() {
   return (
@@ -32,6 +34,8 @@ export default function App() {
           <Route path="exam/:id/questions/:num/insights" element={<InsightsPage />} />
           <Route path="exam/:id/questions/:num/submissions" element={<SubmissionsPage />} />
           <Route path="exam/:id/bulk-submit" element={<BulkSubmitPage />} />
+          <Route path="exam/:id/students" element={<StudentsPage />} />
+          <Route path="exam/:id/students/:studentName" element={<StudentDetailPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

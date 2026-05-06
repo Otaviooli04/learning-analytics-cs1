@@ -46,6 +46,11 @@ export const getTurma = (id) => api.get(`/turmas/${id}`)
 export const getQuestionSubmissions = (examId, questionNumber) =>
   api.get(`/exam/${examId}/questions/${questionNumber}/submissions`)
 
+export const getExamStudents = (examId) => api.get(`/exam/${examId}/students`)
+
+export const getStudentDetail = (examId, studentName) =>
+  api.get(`/exam/${examId}/students/detail`, { params: { name: studentName } })
+
 export const getTestCases = (examId, questionNumber) =>
   api.get(`/exam/${examId}/questions/${questionNumber}/testcases`)
 

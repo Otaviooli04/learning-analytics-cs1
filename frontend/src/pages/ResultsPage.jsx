@@ -113,6 +113,9 @@ export default function ResultsPage() {
                             <Badge color={s.all_tests_passed ? 'green' : s.compile_error ? 'red' : 'yellow'}>
                               {s.all_tests_passed ? 'Correto' : s.compile_error ? 'Erro compilação' : s.diagnosis.error_category}
                             </Badge>
+                            {s.student_name && (
+                              <span className="text-xs font-medium text-gray-700">{s.student_name}</span>
+                            )}
                             <span className="text-xs text-gray-400">{new Date(s.submitted_at).toLocaleString('pt-BR')}</span>
                           </div>
                           <p className="text-xs text-gray-500">{s.diagnosis.pedagogical_diagnosis}</p>
