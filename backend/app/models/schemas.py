@@ -94,6 +94,17 @@ class TestCaseAddRequest(BaseModel):
     test_cases: List[TestCase]
 
 
+class TestCaseResponse(BaseModel):
+    id: int
+    input: str
+    expected_output: str
+
+
+class TestCaseUpdateRequest(BaseModel):
+    input: str
+    expected_output: str
+
+
 class QuestionResponse(BaseModel):
     id: int
     number: str
@@ -113,12 +124,6 @@ class ExamResponse(BaseModel):
     questions: List[QuestionResponse]
 
 
-class QuestionSubmissionsResponse(BaseModel):
-    question_number: str
-    statement: str
-    submissions: List[SubmissionResult]
-
-
 class SubmissionResult(BaseModel):
     id: int
     code: str
@@ -128,6 +133,12 @@ class SubmissionResult(BaseModel):
     submitted_at: str
     student_name: Optional[str] = None
     test_results: List[TestResult] = []
+
+
+class QuestionSubmissionsResponse(BaseModel):
+    question_number: str
+    statement: str
+    submissions: List[SubmissionResult]
 
 
 class ErrorCount(BaseModel):

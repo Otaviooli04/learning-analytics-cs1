@@ -2,7 +2,7 @@ from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from app.models.database import get_db
-from app.models.orm import Exam, Question, QuestionCluster
+from app.models.orm import Exam, Question, QuestionCluster, TestCase as TestCaseORM
 from app.models.schemas import (
     ClusterInfo,
     ClusteringResponse,
@@ -13,6 +13,8 @@ from app.models.schemas import (
     QuestionResponse,
     ScatterPoint,
     TestCaseAddRequest,
+    TestCaseResponse,
+    TestCaseUpdateRequest,
 )
 from app.services.exam_service import process_exam_upload, add_test_cases, get_exam_results
 from app.ml.cluster import FeatureStrategy, cluster_question
@@ -47,6 +49,17 @@ def get_exam(exam_id: int, db: Session = Depends(get_db)):
     return _exam_to_response(exam)
 
 
+@router.get("/{exam_id}/questions/{question_number}/testcases", response_model=list[TestCaseResponse])
+def list_question_testcases(exam_id: int, question_number: str, db: Session = Depends(get_db)):
+    question = db.query(Question).filter(
+        Question.exam_id == exam_id,
+        Question.number == question_number,
+    ).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Questão não encontrada.")
+    return [TestCaseResponse(id=tc.id, input=tc.input, expected_output=tc.expected_output) for tc in question.test_cases]
+
+
 @router.post("/{exam_id}/questions/{question_number}/testcases")
 def add_question_testcases(
     exam_id: int,
@@ -63,6 +76,60 @@ def add_question_testcases(
 
     count = add_test_cases(question.id, [tc.model_dump() for tc in body.test_cases], db)
     return {"added": count, "question_number": question_number}
+
+
+@router.put("/{exam_id}/questions/{question_number}/testcases/{tc_id}", response_model=TestCaseResponse)
+def update_question_testcase(
+    exam_id: int,
+    question_number: str,
+    tc_id: int,
+    body: TestCaseUpdateRequest,
+    db: Session = Depends(get_db),
+):
+    question = db.query(Question).filter(
+        Question.exam_id == exam_id,
+        Question.number == question_number,
+    ).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Questão não encontrada.")
+
+    tc = db.query(TestCaseORM).filter(
+        TestCaseORM.id == tc_id,
+        TestCaseORM.question_id == question.id,
+    ).first()
+    if not tc:
+        raise HTTPException(status_code=404, detail="Test case não encontrado.")
+
+    tc.input = body.input
+    tc.expected_output = body.expected_output
+    db.commit()
+    db.refresh(tc)
+    return TestCaseResponse(id=tc.id, input=tc.input, expected_output=tc.expected_output)
+
+
+@router.delete("/{exam_id}/questions/{question_number}/testcases/{tc_id}", status_code=204)
+def delete_question_testcase(
+    exam_id: int,
+    question_number: str,
+    tc_id: int,
+    db: Session = Depends(get_db),
+):
+    question = db.query(Question).filter(
+        Question.exam_id == exam_id,
+        Question.number == question_number,
+    ).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Questão não encontrada.")
+
+    tc = db.query(TestCaseORM).filter(
+        TestCaseORM.id == tc_id,
+        TestCaseORM.question_id == question.id,
+    ).first()
+    if not tc:
+        raise HTTPException(status_code=404, detail="Test case não encontrado.")
+
+    db.delete(tc)
+    db.commit()
 
 
 @router.get("/{exam_id}/results", response_model=ExamResultsResponse)

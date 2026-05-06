@@ -37,3 +37,12 @@ export const getTurma = (id) => api.get(`/turmas/${id}`)
 
 export const getQuestionSubmissions = (examId, questionNumber) =>
   api.get(`/exam/${examId}/questions/${questionNumber}/submissions`)
+
+export const getTestCases = (examId, questionNumber) =>
+  api.get(`/exam/${examId}/questions/${questionNumber}/testcases`)
+
+export const deleteTestCase = (examId, questionNumber, tcId) =>
+  api.delete(`/exam/${examId}/questions/${questionNumber}/testcases/${tcId}`)
+
+export const updateTestCase = (examId, questionNumber, tcId, data) =>
+  api.put(`/exam/${examId}/questions/${questionNumber}/testcases/${tcId}`, data)
