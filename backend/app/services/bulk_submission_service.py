@@ -44,17 +44,17 @@ def process_bulk_zip(zip_bytes: bytes, exam_id: int, fmt: str, db: Session) -> d
                 continue
 
             if fmt == 'by_student':
-                student_name = parts[0].replace('_', ' ').strip()
+                matricula = parts[0].strip()
                 filename_stem = parts[-1][:-2]
                 question_number = _extract_question_number(filename_stem)
             else:
                 folder = parts[0]
                 question_number = _extract_question_number(folder)
-                student_name = parts[-1][:-2].replace('_', ' ').strip()
+                matricula = parts[-1][:-2].strip()
 
             if not question_number:
                 items.append({
-                    'student': student_name,
+                    'matricula': matricula,
                     'question': None,
                     'file': norm_name,
                     'status': 'error',
@@ -64,9 +64,9 @@ def process_bulk_zip(zip_bytes: bytes, exam_id: int, fmt: str, db: Session) -> d
 
             code = zf.read(raw_name).decode('utf-8', errors='replace')
             try:
-                evaluate_submission(exam_id, question_number, code, db, student_name=student_name)
+                evaluate_submission(exam_id, question_number, code, db, matricula=matricula)
                 items.append({
-                    'student': student_name,
+                    'matricula': matricula,
                     'question': question_number,
                     'file': norm_name,
                     'status': 'ok',
@@ -74,7 +74,7 @@ def process_bulk_zip(zip_bytes: bytes, exam_id: int, fmt: str, db: Session) -> d
                 })
             except ValueError as e:
                 items.append({
-                    'student': student_name,
+                    'matricula': matricula,
                     'question': question_number,
                     'file': norm_name,
                     'status': 'error',
@@ -82,7 +82,7 @@ def process_bulk_zip(zip_bytes: bytes, exam_id: int, fmt: str, db: Session) -> d
                 })
             except Exception as e:
                 items.append({
-                    'student': student_name,
+                    'matricula': matricula,
                     'question': question_number,
                     'file': norm_name,
                     'status': 'error',

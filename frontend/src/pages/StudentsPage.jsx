@@ -75,14 +75,14 @@ export default function StudentsPage() {
           <svg className="w-10 h-10 mx-auto mb-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
           </svg>
-          <p className="text-sm">Nenhuma submissão com nome de aluno ainda.</p>
+          <p className="text-sm">Nenhuma submissão com matrícula ainda.</p>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 min-w-[180px]">Aluno</th>
+                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 min-w-[180px]">Matrícula</th>
                 {data.question_numbers.map(num => (
                   <th key={num} className="px-3 py-3 text-xs font-medium text-gray-500 text-center">
                     Q{num}
@@ -98,18 +98,18 @@ export default function StudentsPage() {
                   : null
                 return (
                   <tr
-                    key={student.name}
-                    onClick={() => navigate(`/exam/${id}/students/${encodeURIComponent(student.name)}`)}
+                    key={student.matricula}
+                    onClick={() => navigate(`/exam/${id}/students/${encodeURIComponent(student.matricula)}`)}
                     className="hover:bg-purple-50 cursor-pointer transition-colors"
                   >
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
                           <span className="text-xs font-semibold text-purple-600">
-                            {student.name[0]?.toUpperCase()}
+                            {student.matricula?.[0]}
                           </span>
                         </div>
-                        <span className="font-medium text-gray-900 truncate max-w-[140px]">{student.name}</span>
+                        <span className="font-medium text-gray-900 truncate max-w-[140px]">{student.matricula}</span>
                       </div>
                     </td>
                     {student.questions.map(qs => (

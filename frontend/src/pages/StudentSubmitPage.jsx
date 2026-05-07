@@ -8,7 +8,7 @@ export default function StudentSubmitPage() {
   const { examId } = useParams()
   const [exam, setExam] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [studentName, setStudentName] = useState('')
+  const [matricula, setMatricula] = useState('')
   const [selectedQuestion, setSelectedQuestion] = useState('')
   const [code, setCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -27,13 +27,13 @@ export default function StudentSubmitPage() {
   }, [examId])
 
   const handleSubmit = async () => {
-    if (!studentName.trim()) { setError('Informe seu nome antes de enviar.'); return }
+    if (!matricula.trim()) { setError('Informe seu número de matrícula antes de enviar.'); return }
     if (!code.trim()) { setError('Escreva o código antes de enviar.'); return }
     setError('')
     setSubmitting(true)
     setResult(null)
     try {
-      const { data } = await submitCode(examId, selectedQuestion, code, studentName.trim())
+      const { data } = await submitCode(examId, selectedQuestion, code, matricula.trim())
       setResult(data)
       setSubmitted(true)
     } catch (e) {
@@ -97,12 +97,12 @@ export default function StudentSubmitPage() {
         {!submitted ? (
           <div className="space-y-4">
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Seu nome completo</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Número de matrícula</label>
               <input
                 type="text"
-                value={studentName}
-                onChange={e => setStudentName(e.target.value)}
-                placeholder="Ex: João Silva"
+                value={matricula}
+                onChange={e => setMatricula(e.target.value)}
+                placeholder="Ex: 12345678"
                 className="w-full text-sm rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
             </div>
@@ -160,7 +160,7 @@ export default function StudentSubmitPage() {
 
             <button
               onClick={handleSubmit}
-              disabled={submitting || !code.trim() || !studentName.trim()}
+              disabled={submitting || !code.trim() || !matricula.trim()}
               className="w-full inline-flex items-center justify-center gap-2 text-sm px-4 py-3 rounded-xl bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
             >
               {submitting && <Spinner className="w-4 h-4" />}
@@ -174,7 +174,7 @@ export default function StudentSubmitPage() {
                 <Badge color={diagColor(result.diagnosis?.error_category)}>
                   {result.diagnosis?.error_category}
                 </Badge>
-                <span className="text-xs text-gray-400">Questão {selectedQuestion} — {studentName}</span>
+                <span className="text-xs text-gray-400">Questão {selectedQuestion} — {matricula}</span>
               </div>
               <p className="text-sm text-gray-700">{result.diagnosis?.pedagogical_diagnosis}</p>
               {result.diagnosis?.actionable_feedback && (

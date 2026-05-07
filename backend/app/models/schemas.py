@@ -77,12 +77,12 @@ class CodeSubmissionRequest(BaseModel):
     exam_id: int
     question_number: str
     code: str
-    student_name: Optional[str] = None
+    matricula: Optional[str] = None
     dry_run: bool = False
 
 
 class BulkSubmissionItem(BaseModel):
-    student: str
+    matricula: str
     question: Optional[str]
     file: str
     status: str
@@ -147,7 +147,7 @@ class SubmissionResult(BaseModel):
     compile_error: str
     diagnosis: DiagnosisResult
     submitted_at: str
-    student_name: Optional[str] = None
+    matricula: Optional[str] = None
     test_results: List[TestResult] = []
 
 
@@ -165,7 +165,7 @@ class StudentQuestionStatus(BaseModel):
 
 
 class StudentSummary(BaseModel):
-    name: str
+    matricula: str
     questions: List[StudentQuestionStatus]
     answered_count: int
     passed_count: int
@@ -192,7 +192,7 @@ class StudentSubmissionDetail(BaseModel):
 
 
 class StudentDetailResponse(BaseModel):
-    student_name: str
+    matricula: str
     total_questions: int
     passed_count: int
     answered_count: int

@@ -169,11 +169,11 @@ def get_students(exam_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{exam_id}/students/detail", response_model=StudentDetailResponse)
-def get_student(exam_id: int, name: str = Query(...), db: Session = Depends(get_db)):
+def get_student(exam_id: int, matricula: str = Query(...), db: Session = Depends(get_db)):
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Prova não encontrada.")
-    return get_student_detail(exam, name)
+    return get_student_detail(exam, matricula)
 
 
 @router.get("/{exam_id}/results", response_model=ExamResultsResponse)
@@ -289,7 +289,7 @@ def get_question_submissions(exam_id: int, question_number: str, db: Session = D
         "submissions": [
             {
                 "id": s.id,
-                "student_name": s.student_name,
+                "matricula": s.matricula,
                 "code": s.code,
                 "compile_error": s.compile_error or "",
                 "warnings": s.warnings or "",

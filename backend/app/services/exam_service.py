@@ -57,7 +57,7 @@ def get_exam_results(exam: Exam) -> dict:
                 {
                     "id": s.id,
                     "code": s.code,
-                    "student_name": s.student_name,
+                    "matricula": s.matricula,
                     "all_tests_passed": s.all_tests_passed,
                     "compile_error": s.compile_error or "",
                     "diagnosis": {
@@ -78,11 +78,13 @@ def get_exam_results(exam: Exam) -> dict:
 
 
 def get_exam_students(exam: Exam) -> dict:
-    # latest submission per (student_name, question_number)
+    # latest submission per (matricula, question_number)
     student_map: dict[str, dict[str, object]] = {}
     for q in exam.questions:
         for s in q.submissions:
-            name = s.student_name or "Anônimo"
+            name = s.matricula
+            if not name:
+                continue
             if name not in student_map:
                 student_map[name] = {}
             prev = student_map[name].get(q.number)
@@ -105,7 +107,7 @@ def get_exam_students(exam: Exam) -> dict:
         answered = sum(1 for qs in questions_status if qs["submission_id"] is not None)
         passed = sum(1 for qs in questions_status if qs["passed"])
         students.append({
-            "name": name,
+            "matricula": name,
             "questions": questions_status,
             "answered_count": answered,
             "passed_count": passed,
@@ -115,12 +117,12 @@ def get_exam_students(exam: Exam) -> dict:
     return {"question_numbers": question_numbers, "students": students}
 
 
-def get_student_detail(exam: Exam, student_name: str) -> dict:
+def get_student_detail(exam: Exam, matricula: str) -> dict:
     best: dict[str, tuple] = {}
     for q in exam.questions:
         for s in q.submissions:
-            name = s.student_name or "Anônimo"
-            if name != student_name:
+            name = s.matricula
+            if name != matricula:
                 continue
             prev = best.get(q.number)
             if prev is None or s.id > prev[1].id:
@@ -165,7 +167,7 @@ def get_student_detail(exam: Exam, student_name: str) -> dict:
     answered = sum(1 for s in submissions if s["submission_id"] is not None)
     passed = sum(1 for s in submissions if s["all_tests_passed"])
     return {
-        "student_name": student_name,
+        "matricula": matricula,
         "total_questions": len(exam.questions),
         "answered_count": answered,
         "passed_count": passed,

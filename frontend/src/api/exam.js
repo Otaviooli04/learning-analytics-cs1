@@ -20,12 +20,12 @@ export const runClustering = (examId, questionNumber, strategy) =>
 export const runInsights = (examId, questionNumber) =>
   api.post(`/exam/${examId}/questions/${questionNumber}/insights`)
 
-export const submitCode = (examId, questionNumber, code, studentName = '', dryRun = false) =>
+export const submitCode = (examId, questionNumber, code, matricula = '', dryRun = false) =>
   api.post('/submission/evaluate', {
     exam_id: Number(examId),
     question_number: questionNumber,
     code,
-    student_name: studentName || null,
+    matricula: matricula || null,
     dry_run: dryRun,
   })
 
@@ -48,8 +48,8 @@ export const getQuestionSubmissions = (examId, questionNumber) =>
 
 export const getExamStudents = (examId) => api.get(`/exam/${examId}/students`)
 
-export const getStudentDetail = (examId, studentName) =>
-  api.get(`/exam/${examId}/students/detail`, { params: { name: studentName } })
+export const getStudentDetail = (examId, matricula) =>
+  api.get(`/exam/${examId}/students/detail`, { params: { matricula } })
 
 export const getTestCases = (examId, questionNumber) =>
   api.get(`/exam/${examId}/questions/${questionNumber}/testcases`)

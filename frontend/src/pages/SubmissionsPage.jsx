@@ -75,7 +75,7 @@ export default function SubmissionsPage() {
                     </svg>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{sub.student_name || 'Anônimo'}</p>
+                    <p className="text-sm font-medium text-gray-900">{sub.matricula || '—'}</p>
                     <p className="text-xs text-gray-400">{formatDateTime(sub.submitted_at)}</p>
                   </div>
                 </div>

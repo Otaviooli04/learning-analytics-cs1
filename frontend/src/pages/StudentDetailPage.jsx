@@ -5,8 +5,8 @@ import Spinner from '../components/Spinner'
 import Badge from '../components/Badge'
 
 export default function StudentDetailPage() {
-  const { id, studentName } = useParams()
-  const decoded = decodeURIComponent(studentName)
+  const { id, matricula } = useParams()
+  const decoded = decodeURIComponent(matricula)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')

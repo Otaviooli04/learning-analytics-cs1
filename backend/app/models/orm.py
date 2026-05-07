@@ -71,7 +71,7 @@ class Submission(Base):
     cluster_id = Column(Integer, nullable=True)
     umap_x = Column(String, nullable=True)
     umap_y = Column(String, nullable=True)
-    student_name = Column(String, nullable=True)
+    matricula = Column(String, nullable=True)
     submitted_at = Column(DateTime, default=datetime.utcnow)
 
     question = relationship("Question", back_populates="submissions")
