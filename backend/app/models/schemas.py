@@ -1,5 +1,24 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import List, Optional, Literal
+
+
+class ProfessorCreate(BaseModel):
+    email: str
+    nome: str = ""
+    senha: str
+
+
+class ProfessorResponse(BaseModel):
+    id: int
+    email: str
+    nome: str
+    created_at: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    professor: ProfessorResponse
 
 
 class TurmaCreate(BaseModel):

@@ -3,16 +3,19 @@ from sqlalchemy.orm import Session
 from app.models.orm import Turma
 
 
-def create_turma(nome: str, codigo: str, db: Session) -> Turma:
-    turma = Turma(nome=nome, codigo=codigo, created_at=datetime.utcnow())
+def create_turma(nome: str, codigo: str, db: Session, professor_id: int | None = None) -> Turma:
+    turma = Turma(nome=nome, codigo=codigo, created_at=datetime.utcnow(), professor_id=professor_id)
     db.add(turma)
     db.commit()
     db.refresh(turma)
     return turma
 
 
-def list_turmas(db: Session) -> list:
-    turmas = db.query(Turma).order_by(Turma.created_at.desc()).all()
+def list_turmas(db: Session, professor_id: int | None = None) -> list:
+    q = db.query(Turma)
+    if professor_id is not None:
+        q = q.filter(Turma.professor_id == professor_id)
+    turmas = q.order_by(Turma.created_at.desc()).all()
     return [
         {
             "id": t.id,
@@ -25,13 +28,16 @@ def list_turmas(db: Session) -> list:
     ]
 
 
-def get_turma_detail(turma_id: int, db: Session) -> dict | None:
-    turma = db.query(Turma).filter(Turma.id == turma_id).first()
+def get_turma_detail(turma_id: int, db: Session, professor_id: int | None = None) -> dict | None:
+    q = db.query(Turma).filter(Turma.id == turma_id)
+    if professor_id is not None:
+        q = q.filter(Turma.professor_id == professor_id)
+    turma = q.first()
     if not turma:
         return None
     exams = []
     for exam in turma.exams:
-        submission_count = sum(len(q.submissions) for q in exam.questions)
+        submission_count = sum(len(q2.submissions) for q2 in exam.questions)
         exams.append({
             "id": exam.id,
             "filename": exam.filename,

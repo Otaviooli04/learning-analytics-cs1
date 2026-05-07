@@ -4,6 +4,18 @@ from sqlalchemy.orm import relationship
 from app.models.database import Base
 
 
+class Professor(Base):
+    __tablename__ = "professors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, nullable=False, index=True)
+    nome = Column(String, nullable=False)
+    senha_hash = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    turmas = relationship("Turma", back_populates="professor")
+
+
 class Turma(Base):
     __tablename__ = "turmas"
 
@@ -11,7 +23,9 @@ class Turma(Base):
     nome = Column(String, nullable=False)
     codigo = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    professor_id = Column(Integer, ForeignKey("professors.id"), nullable=True)
 
+    professor = relationship("Professor", back_populates="turmas")
     exams = relationship("Exam", back_populates="turma")
 
 
