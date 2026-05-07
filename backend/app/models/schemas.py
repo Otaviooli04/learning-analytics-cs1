@@ -272,3 +272,21 @@ class ClusterInsight(BaseModel):
 class InsightsResponse(BaseModel):
     question_number: str
     insights: List[ClusterInsight]
+
+
+class ExamAnalytics(BaseModel):
+    id: int
+    filename: str
+    created_at: str
+    pass_rate: Optional[float]
+    total_submissoes: int
+    total_alunos: int
+
+
+class TurmaAnalyticsResponse(BaseModel):
+    turma_id: int
+    total_alunos: int
+    aproveitamento_medio: Optional[float]
+    total_submissoes: int
+    provas: List[ExamAnalytics]
+    top_erros: List[ErrorCount]

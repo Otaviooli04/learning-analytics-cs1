@@ -37,4 +37,8 @@ Retorne apenas o JSON com a chave "questions" contendo a lista de questões de c
     )
 
     import json
-    return json.loads(response.text)
+    import re
+    text = response.text.strip()
+    text = re.sub(r'^```(?:json)?\s*', '', text)
+    text = re.sub(r'\s*```$', '', text)
+    return json.loads(text)

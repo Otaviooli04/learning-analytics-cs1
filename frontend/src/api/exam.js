@@ -43,6 +43,8 @@ export const listTurmas = () => api.get('/turmas')
 
 export const getTurma = (id) => api.get(`/turmas/${id}`)
 
+export const getTurmaAnalytics = (id) => api.get(`/turmas/${id}/analytics`)
+
 export const getQuestionSubmissions = (examId, questionNumber) =>
   api.get(`/exam/${examId}/questions/${questionNumber}/submissions`)
 
