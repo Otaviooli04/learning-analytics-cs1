@@ -113,16 +113,15 @@ export default function BulkSubmitPage() {
       </div>
 
       {/* Upload */}
-      {!result && (
+      {!result && !uploading && (
         <div
-          onClick={() => !uploading && inputRef.current.click()}
+          onClick={() => inputRef.current.click()}
           onDragOver={e => { e.preventDefault(); setDragging(true) }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           className={`
             border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors
             ${dragging ? 'border-purple-400 bg-purple-50' : 'border-gray-200 bg-white hover:border-purple-300 hover:bg-gray-50'}
-            ${uploading ? 'pointer-events-none opacity-60' : ''}
           `}
         >
           <input
@@ -132,22 +131,29 @@ export default function BulkSubmitPage() {
             className="hidden"
             onChange={e => handleFile(e.target.files[0])}
           />
-          {uploading ? (
-            <div className="flex flex-col items-center gap-3">
-              <Spinner className="w-7 h-7 text-purple-600" />
-              <p className="text-sm text-gray-500">Processando submissões…</p>
-            </div>
-          ) : (
-            <>
-              <svg className="mx-auto w-9 h-9 text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-              </svg>
-              <p className="text-sm font-medium text-gray-700">
-                Arraste o arquivo aqui ou <span className="text-purple-600">clique para selecionar</span>
-              </p>
-              <p className="mt-1 text-xs text-gray-400">Somente .zip</p>
-            </>
-          )}
+          <svg className="mx-auto w-9 h-9 text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+          </svg>
+          <p className="text-sm font-medium text-gray-700">
+            Arraste o arquivo aqui ou <span className="text-purple-600">clique para selecionar</span>
+          </p>
+          <p className="mt-1 text-xs text-gray-400">Somente .zip</p>
+        </div>
+      )}
+
+      {/* Loading */}
+      {uploading && (
+        <div className="bg-white rounded-xl border border-purple-200 p-8 text-center">
+          <Spinner className="w-8 h-8 text-purple-600 mx-auto mb-4" />
+          <p className="text-sm font-medium text-gray-800 mb-1">Processando submissões…</p>
+          <p className="text-xs text-gray-500 mb-4">
+            Cada código é compilado e executado em Docker. Isso pode levar <strong>30 a 60 segundos</strong> dependendo da quantidade de arquivos.
+          </p>
+          <div className="flex items-center justify-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
         </div>
       )}
 
@@ -187,7 +193,7 @@ export default function BulkSubmitPage() {
             <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
               {result.items.map((item, i) => (
                 <div key={i} className="grid grid-cols-[1fr_80px_80px_1fr] gap-0 px-4 py-2.5 items-center">
-                  <span className="text-sm text-gray-800 truncate">{item.student || '—'}</span>
+                  <span className="text-sm text-gray-800 truncate">{item.matricula || '—'}</span>
                   <span className="text-sm text-gray-600">{item.question ? `Q${item.question}` : '—'}</span>
                   <span>
                     {item.status === 'ok'
