@@ -251,6 +251,7 @@ class ScatterPoint(BaseModel):
     x: float
     y: float
     cluster_id: int
+    matricula: Optional[str] = None
 
 
 class ClusteringResponse(BaseModel):

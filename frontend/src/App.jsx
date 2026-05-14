@@ -19,6 +19,7 @@ import StudentSubmitPage from './pages/StudentSubmitPage'
 import BulkSubmitPage from './pages/BulkSubmitPage'
 import StudentsPage from './pages/StudentsPage'
 import StudentDetailPage from './pages/StudentDetailPage'
+import QuestionPage from './pages/QuestionPage'
 
 export default function App() {
   return (
@@ -40,6 +41,7 @@ export default function App() {
               <Route path="turma/:turmaId/upload" element={<ExamUploadPage />} />
               <Route path="upload" element={<UploadPage />} />
               <Route path="exam/:id" element={<ExamDashboard />} />
+              <Route path="exam/:id/questions/:num" element={<QuestionPage />} />
               <Route path="exam/:id/questions/:num/testcases" element={<TestCasesPage />} />
               <Route path="exam/:id/submit" element={<SubmitPage />} />
               <Route path="exam/:id/results" element={<ResultsPage />} />

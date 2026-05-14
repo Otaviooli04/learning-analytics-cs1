@@ -145,24 +145,36 @@ export default function ClusterPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {result.clusters.map((c, i) => (
-              <div key={c.cluster_id} className="bg-white rounded-xl border border-gray-200 p-5">
-                <div className="flex items-center gap-2 mb-2">
-                  <span
-                    className="w-3 h-3 rounded-full shrink-0"
-                    style={{ backgroundColor: CLUSTER_COLORS[i % CLUSTER_COLORS.length] }}
-                  />
-                  <span className="text-sm font-medium text-gray-800">Cluster {c.cluster_id}</span>
-                  <span className="ml-auto text-xs text-gray-400">{c.size} aluno{c.size !== 1 ? 's' : ''}</span>
+            {result.clusters.map((c, i) => {
+              const alunos = result.scatter
+                .filter(p => p.cluster_id === c.cluster_id && p.matricula)
+                .map(p => p.matricula)
+              return (
+                <div key={c.cluster_id} className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: CLUSTER_COLORS[i % CLUSTER_COLORS.length] }}
+                    />
+                    <span className="text-sm font-medium text-gray-800">Cluster {c.cluster_id}</span>
+                    <span className="ml-auto text-xs text-gray-400">{c.size} aluno{c.size !== 1 ? 's' : ''}</span>
+                  </div>
+                  <Badge color="gray">{c.dominant_error}</Badge>
+                  {alunos.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      {alunos.map(m => (
+                        <span key={m} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-mono">{m}</span>
+                      ))}
+                    </div>
+                  )}
+                  {c.representative_code && (
+                    <pre className="mt-3 text-xs font-mono bg-gray-50 rounded-lg p-3 overflow-x-auto text-gray-600 max-h-32 whitespace-pre-wrap">
+                      {c.representative_code}
+                    </pre>
+                  )}
                 </div>
-                <Badge color="gray">{c.dominant_error}</Badge>
-                {c.representative_code && (
-                  <pre className="mt-3 text-xs font-mono bg-gray-50 rounded-lg p-3 overflow-x-auto text-gray-600 max-h-32 whitespace-pre-wrap">
-                    {c.representative_code}
-                  </pre>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

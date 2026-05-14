@@ -157,19 +157,19 @@ export default function ExamDashboard() {
                   + Test cases
                 </Link>
                 <Link
-                  to={`/exam/${id}/questions/${q.number}/submissions`}
+                  to={`/exam/${id}/questions/${q.number}`}
                   className="text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
                 >
                   Respostas
                 </Link>
                 <Link
-                  to={`/exam/${id}/questions/${q.number}/cluster`}
+                  to={`/exam/${id}/questions/${q.number}?tab=cluster`}
                   className="text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
                 >
                   Clustering
                 </Link>
                 <Link
-                  to={`/exam/${id}/questions/${q.number}/insights`}
+                  to={`/exam/${id}/questions/${q.number}?tab=insights`}
                   className="text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
                 >
                   Insights LLM
