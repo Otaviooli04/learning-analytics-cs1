@@ -1,5 +1,53 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import List, Optional, Literal
+
+
+class ProfessorCreate(BaseModel):
+    email: str
+    nome: str = ""
+    senha: str
+
+
+class ProfessorResponse(BaseModel):
+    id: int
+    email: str
+    nome: str
+    created_at: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    professor: ProfessorResponse
+
+
+class TurmaCreate(BaseModel):
+    nome: str
+    codigo: str
+
+
+class ExamSummary(BaseModel):
+    id: int
+    filename: str
+    created_at: str
+    question_count: int
+    submission_count: int
+
+
+class TurmaResponse(BaseModel):
+    id: int
+    nome: str
+    codigo: str
+    created_at: str
+    exam_count: int
+
+
+class TurmaDetailResponse(BaseModel):
+    id: int
+    nome: str
+    codigo: str
+    created_at: str
+    exams: List[ExamSummary]
 
 
 class TestCase(BaseModel):
@@ -48,6 +96,23 @@ class CodeSubmissionRequest(BaseModel):
     exam_id: int
     question_number: str
     code: str
+    matricula: Optional[str] = None
+    dry_run: bool = False
+
+
+class BulkSubmissionItem(BaseModel):
+    matricula: str
+    question: Optional[str]
+    file: str
+    status: str
+    message: str
+
+
+class BulkSubmissionResponse(BaseModel):
+    total: int
+    processed: int
+    errors: int
+    items: List[BulkSubmissionItem]
 
 
 class CodeSubmissionResponse(BaseModel):
@@ -64,6 +129,17 @@ class TestCaseAddRequest(BaseModel):
     test_cases: List[TestCase]
 
 
+class TestCaseResponse(BaseModel):
+    id: int
+    input: str
+    expected_output: str
+
+
+class TestCaseUpdateRequest(BaseModel):
+    input: str
+    expected_output: str
+
+
 class QuestionResponse(BaseModel):
     id: int
     number: str
@@ -77,6 +153,9 @@ class QuestionResponse(BaseModel):
 class ExamResponse(BaseModel):
     id: int
     filename: str
+    created_at: str
+    turma_id: Optional[int] = None
+    turma_nome: Optional[str] = None
     questions: List[QuestionResponse]
 
 
@@ -87,6 +166,56 @@ class SubmissionResult(BaseModel):
     compile_error: str
     diagnosis: DiagnosisResult
     submitted_at: str
+    matricula: Optional[str] = None
+    test_results: List[TestResult] = []
+
+
+class QuestionSubmissionsResponse(BaseModel):
+    question_number: str
+    statement: str
+    submissions: List[SubmissionResult]
+
+
+class StudentQuestionStatus(BaseModel):
+    question_number: str
+    submission_id: Optional[int]
+    passed: Optional[bool]
+    error_category: Optional[str]
+
+
+class StudentSummary(BaseModel):
+    matricula: str
+    questions: List[StudentQuestionStatus]
+    answered_count: int
+    passed_count: int
+    total_questions: int
+
+
+class ExamStudentsResponse(BaseModel):
+    question_numbers: List[str]
+    students: List[StudentSummary]
+
+
+class StudentSubmissionDetail(BaseModel):
+    question_number: str
+    statement: str
+    submission_id: Optional[int]
+    code: Optional[str]
+    all_tests_passed: Optional[bool]
+    compile_error: str
+    error_category: str
+    pedagogical_diagnosis: str
+    actionable_feedback: str
+    submitted_at: Optional[str]
+    test_results: List[TestResult]
+
+
+class StudentDetailResponse(BaseModel):
+    matricula: str
+    total_questions: int
+    passed_count: int
+    answered_count: int
+    submissions: List[StudentSubmissionDetail]
 
 
 class ErrorCount(BaseModel):
@@ -122,6 +251,7 @@ class ScatterPoint(BaseModel):
     x: float
     y: float
     cluster_id: int
+    matricula: Optional[str] = None
 
 
 class ClusteringResponse(BaseModel):
@@ -143,3 +273,21 @@ class ClusterInsight(BaseModel):
 class InsightsResponse(BaseModel):
     question_number: str
     insights: List[ClusterInsight]
+
+
+class ExamAnalytics(BaseModel):
+    id: int
+    filename: str
+    created_at: str
+    pass_rate: Optional[float]
+    total_submissoes: int
+    total_alunos: int
+
+
+class TurmaAnalyticsResponse(BaseModel):
+    turma_id: int
+    total_alunos: int
+    aproveitamento_medio: Optional[float]
+    total_submissoes: int
+    provas: List[ExamAnalytics]
+    top_erros: List[ErrorCount]

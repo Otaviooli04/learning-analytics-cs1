@@ -10,7 +10,7 @@ router = APIRouter(prefix="/submission", tags=["submission"])
 @router.post("/evaluate", response_model=CodeSubmissionResponse)
 async def submit_answer(body: CodeSubmissionRequest, db: Session = Depends(get_db)):
     try:
-        return evaluate_submission(body.exam_id, body.question_number, body.code, db)
+        return evaluate_submission(body.exam_id, body.question_number, body.code, db, matricula=body.matricula, dry_run=body.dry_run)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except RuntimeError as e:

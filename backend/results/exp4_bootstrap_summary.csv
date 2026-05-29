@@ -1,0 +1,2 @@
+estrategia,n_bootstrap,sample_ratio,ari_mean,ari_std,ari_min,ari_max,ari_q25,ari_q75
+tfidf_behavioral,50,0.8,0.9819,0.056,0.7354,1.0,1.0,1.0
