@@ -56,7 +56,8 @@ export default function BulkSubmitPage() {
       const { data } = await bulkSubmit(id, file, format)
       setResult(data)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Erro ao processar o arquivo.')
+      const msg = e.response?.data?.detail || e.message || 'Erro desconhecido'
+      setError(msg)
     } finally {
       setUploading(false)
     }
@@ -147,7 +148,7 @@ export default function BulkSubmitPage() {
           <Spinner className="w-8 h-8 text-purple-600 mx-auto mb-4" />
           <p className="text-sm font-medium text-gray-800 mb-1">Processando submissões…</p>
           <p className="text-xs text-gray-500 mb-4">
-            Cada código é compilado e executado em Docker. Isso pode levar <strong>30 a 60 segundos</strong> dependendo da quantidade de arquivos.
+            Cada código é compilado e executado em Docker — um container por test case. Com 12 submissões e 4 test cases cada, isso pode levar <strong>2 a 3 minutos</strong>. Não feche a página.
           </p>
           <div className="flex items-center justify-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '0ms' }} />
