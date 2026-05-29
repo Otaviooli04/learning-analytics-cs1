@@ -308,6 +308,7 @@ def _exam_to_response(exam: Exam) -> ExamResponse:
                 required_structures=q.required_structures or [],
                 forbidden_structures=q.forbidden_structures or [],
                 requires_loop=q.requires_loop,
+                required_functions=q.required_functions or [],
                 test_case_count=len(q.test_cases),
             )
             for q in exam.questions

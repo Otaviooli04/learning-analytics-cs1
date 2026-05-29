@@ -68,6 +68,22 @@ class StructureCheck(BaseModel):
     found_forbidden: List[str] = []
 
 
+class FunctionRequirement(BaseModel):
+    name: str
+    param_count: Optional[int] = None
+    return_type: Optional[str] = None
+    requires_recursion: bool = False
+    requires_pointer_param: bool = False
+
+
+class FunctionCheck(BaseModel):
+    compliant: bool
+    missing_functions: List[str] = []
+    signature_mismatches: List[str] = []
+    missing_recursion: List[str] = []
+    missing_pointer_param: List[str] = []
+
+
 class DiagnosisResult(BaseModel):
     error_category: str
     pedagogical_diagnosis: str
@@ -81,6 +97,7 @@ class CodeQuestion(BaseModel):
     required_structures: List[str] = []
     forbidden_structures: List[str] = []
     requires_loop: bool = False
+    required_functions: List[FunctionRequirement] = []
 
 
 class ExamStructure(BaseModel):
@@ -122,6 +139,7 @@ class CodeSubmissionResponse(BaseModel):
     test_results: List[TestResult] = []
     all_tests_passed: Optional[bool] = None
     structure_check: Optional[StructureCheck] = None
+    function_check: Optional[FunctionCheck] = None
     diagnosis: DiagnosisResult
 
 
@@ -147,6 +165,7 @@ class QuestionResponse(BaseModel):
     required_structures: List[str]
     forbidden_structures: List[str]
     requires_loop: bool
+    required_functions: List[FunctionRequirement] = []
     test_case_count: int
 
 

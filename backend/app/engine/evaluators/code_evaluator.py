@@ -24,4 +24,5 @@ def evaluate_code(code: str, test_cases: list = None, required_structures: list 
         "structure_check": structure_check,
         "diagnosis": diagnosis,
         "ast_structures": static_result.get("structures", []),
+        "ast_functions": static_result.get("functions", []),
     }
