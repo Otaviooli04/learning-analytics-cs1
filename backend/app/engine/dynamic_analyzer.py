@@ -41,17 +41,23 @@ def compile_and_run(source_code: str, test_cases: list[dict]) -> dict:
 
         test_results = []
         for tc in test_cases:
+            # "timeout 5" dentro do container garante que o processo filho
+            # é morto pelo kernel do container e o container encerra com --rm.
+            # subprocess.run(timeout=7) é apenas backup caso o Docker daemon trave.
             try:
                 run_result = subprocess.run(
                     [
                         "docker", "run", "--rm", "--network", "none", "-i",
                         "-v", f"{temp_dir}:/src", "-w", "/src",
-                        "gcc:latest", "./exe.out",
+                        "gcc:latest", "timeout", "5", "./exe.out",
                     ],
                     input=tc["input"],
-                    capture_output=True, text=True, timeout=5,
+                    capture_output=True, text=True, timeout=7,
                 )
-                actual = run_result.stdout.strip()
+                if run_result.returncode == 124:
+                    actual = "TIMEOUT"
+                else:
+                    actual = run_result.stdout.strip()
                 expected = tc["expected_output"].strip()
                 test_results.append({
                     "input": tc["input"],
@@ -59,7 +65,9 @@ def compile_and_run(source_code: str, test_cases: list[dict]) -> dict:
                     "actual_output": actual,
                     "passed": actual == expected,
                 })
-            except subprocess.TimeoutExpired:
+            except subprocess.TimeoutExpired as e:
+                if e.process:
+                    e.process.kill()
                 test_results.append({
                     "input": tc["input"],
                     "expected_output": tc["expected_output"],

@@ -1,0 +1,17 @@
+cenario,n_total,estrategia,n_clusters,silhouette,purity,noise_ratio,nmi,tempo_s
+Pequena,15,tfidf,5,0.3526,1.0,0.0,1.0,0.015
+Pequena,15,tfidf_ngram,5,0.374,1.0,0.0,1.0,0.014
+Pequena,15,tfidf_category,5,0.4399,1.0,0.0,1.0,0.015
+Pequena,15,tfidf_behavioral,5,0.3967,1.0,0.0,1.0,0.015
+Média,35,tfidf,4,0.7356,0.8,0.0,0.9057,0.034
+Média,35,tfidf_ngram,4,0.7304,0.8,0.0,0.9057,0.031
+Média,35,tfidf_category,5,0.6918,1.0,0.0,1.0,0.031
+Média,35,tfidf_behavioral,5,0.7335,1.0,0.0,1.0,0.031
+Grande,60,tfidf,4,0.9188,0.8,0.0,0.9057,0.054
+Grande,60,tfidf_ngram,11,0.6101,0.9831,0.0167,0.8345,0.055
+Grande,60,tfidf_category,5,0.9329,1.0,0.0,1.0,0.056
+Grande,60,tfidf_behavioral,8,0.8638,1.0,0.0333,0.9317,0.052
+Extra,100,tfidf,26,0.6121,0.9691,0.03,0.6733,0.099
+Extra,100,tfidf_ngram,28,0.5118,0.9684,0.05,0.6388,0.101
+Extra,100,tfidf_category,21,0.5842,1.0,0.06,0.7256,0.096
+Extra,100,tfidf_behavioral,19,0.5181,1.0,0.05,0.7588,0.111

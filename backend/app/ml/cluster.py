@@ -279,6 +279,7 @@ def _build_result(
             "x": float(x),
             "y": float(y),
             "cluster_id": int(label),
+            "matricula": sub.matricula,
         }
         for sub, label, (x, y) in zip(submissions, labels, embedded_viz)
     ]

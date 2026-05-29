@@ -33,9 +33,10 @@ frontend/.vite/
 .DS_Store
 Thumbs.db
 
-# Claude / RTK (ferramentas de desenvolvimento local)
+# Claude / RTK / Serena (ferramentas de desenvolvimento local)
 .claude/
 .rtk/
+.serena/
 
 # Arquivos locais de desenvolvimento
 annotations.txt
