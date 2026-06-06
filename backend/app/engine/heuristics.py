@@ -8,11 +8,58 @@ def check_structures(found: list, required: list, forbidden: list) -> dict:
     }
 
 
+def _normalize_type(t: str) -> str:
+    return "".join((t or "").split()).lower()
+
+
+def check_functions(found: list, required: list) -> dict:
+    found_by_name = {f["name"]: f for f in found}
+    missing = []
+    sig_mismatches = []
+    missing_recursion = []
+    missing_pointer = []
+
+    for req in required:
+        name = req.get("name")
+        fn = found_by_name.get(name)
+        if fn is None:
+            missing.append(name)
+            continue
+
+        expected_count = req.get("param_count")
+        if expected_count is not None and fn["param_count"] != expected_count:
+            sig_mismatches.append(
+                f"{name}: esperado {expected_count} parâmetro(s), encontrado {fn['param_count']}"
+            )
+
+        expected_return = req.get("return_type")
+        if expected_return and _normalize_type(fn["return_type"]) != _normalize_type(expected_return):
+            sig_mismatches.append(
+                f"{name}: esperado retorno '{expected_return}', encontrado '{fn['return_type']}'"
+            )
+
+        if req.get("requires_recursion") and not fn["is_recursive"]:
+            missing_recursion.append(name)
+
+        if req.get("requires_pointer_param") and not fn["has_pointer_param"]:
+            missing_pointer.append(name)
+
+    compliant = not (missing or sig_mismatches or missing_recursion or missing_pointer)
+    return {
+        "compliant": compliant,
+        "missing_functions": missing,
+        "signature_mismatches": sig_mismatches,
+        "missing_recursion": missing_recursion,
+        "missing_pointer_param": missing_pointer,
+    }
+
+
 def classify_error(
     dynamic_result: dict,
     static_result: dict,
     required_structures: list = None,
     forbidden_structures: list = None,
+    required_functions: list = None,
 ) -> dict:
     dyn_success = dynamic_result.get("success", False)
     compile_error = dynamic_result.get("compile_error", "").lower()
@@ -54,6 +101,16 @@ def classify_error(
         if not struct_check["compliant"]:
             return _classify_structure_violation(struct_check)
 
+        reqf = required_functions or []
+        if reqf:
+            func_check = check_functions(static_result.get("functions", []), reqf)
+            if not func_check["compliant"]:
+                fn_diagnosis = _classify_function_violation(
+                    func_check, static_result.get("functions", [])
+                )
+                if fn_diagnosis:
+                    return fn_diagnosis
+
         if test_results:
             failed = [r for r in test_results if not r["passed"]]
             if any(r["actual_output"] == "TIMEOUT" for r in failed):
@@ -86,6 +143,68 @@ def _classify_structure_violation(struct_check: dict) -> dict:
         "pedagogical_diagnosis": f"O código compilou, mas não respeita as restrições da questão — {'; '.join(parts)}.",
         "actionable_feedback": "Revise o enunciado: verifique quais estruturas de controle são exigidas ou proibidas.",
     }
+
+
+def _classify_function_violation(func_check: dict, found_functions: list) -> dict | None:
+    missing = func_check["missing_functions"]
+    if missing:
+        user_functions = [f["name"] for f in found_functions if f["name"] != "main"]
+        if not user_functions:
+            return {
+                "error_category": "Tudo no Main",
+                "pedagogical_diagnosis": (
+                    f"O código resolve o problema inteiramente dentro do main, sem definir "
+                    f"a(s) função(ões) exigida(s): {missing}."
+                ),
+                "actionable_feedback": (
+                    "Modularize a solução: extraia a lógica para a(s) função(ões) pedida(s) no "
+                    "enunciado, com o nome e a assinatura corretos."
+                ),
+            }
+        return {
+            "error_category": "Função Ausente",
+            "pedagogical_diagnosis": f"A(s) função(ões) exigida(s) não foi(ram) definida(s): {missing}.",
+            "actionable_feedback": "Implemente a(s) função(ões) com o nome exato indicado no enunciado.",
+        }
+
+    if func_check["signature_mismatches"]:
+        return {
+            "error_category": "Assinatura Incorreta",
+            "pedagogical_diagnosis": (
+                f"Função definida com assinatura diferente da exigida — "
+                f"{'; '.join(func_check['signature_mismatches'])}."
+            ),
+            "actionable_feedback": (
+                "Ajuste o número/tipo de parâmetros e o tipo de retorno conforme o enunciado."
+            ),
+        }
+
+    if func_check["missing_recursion"]:
+        return {
+            "error_category": "Recursão Faltando",
+            "pedagogical_diagnosis": (
+                f"A(s) função(ões) {func_check['missing_recursion']} deveria(m) ser implementada(s) "
+                f"de forma recursiva, mas não fazem chamada a si mesma(s)."
+            ),
+            "actionable_feedback": (
+                "Reescreva a função para que ela chame a si mesma, com um caso base que encerra a recursão."
+            ),
+        }
+
+    if func_check["missing_pointer_param"]:
+        return {
+            "error_category": "Por-Valor vs Por-Referência",
+            "pedagogical_diagnosis": (
+                f"A(s) função(ões) {func_check['missing_pointer_param']} deveria(m) receber parâmetro "
+                f"por referência (ponteiro), mas usa(m) passagem por valor."
+            ),
+            "actionable_feedback": (
+                "Declare o parâmetro como ponteiro (ex: int *x) e use o operador & na chamada para que "
+                "a função altere o valor original."
+            ),
+        }
+
+    return None
 
 
 def _classify_wrong_output(failed: list, total: int) -> dict:

@@ -22,6 +22,7 @@ def evaluate_submission(exam_id: int, question_number: str, code: str, db: Sessi
         test_cases,
         question.required_structures or [],
         question.forbidden_structures or [],
+        question.required_functions or [],
     )
 
     if dry_run:
