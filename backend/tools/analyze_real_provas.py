@@ -54,6 +54,57 @@ def extract_submissions(pdf_path: str) -> dict:
     return out
 
 
+def extract_testcases(pdf_path: str) -> dict:
+    """Retorna {qnum: [(input, expected), ...]} para questões de valor único.
+
+    As tabelas 'Input Esperado Got' têm linhas delimitadas por glifos ✓/✗
+    (\\uf058/\\uf057): glifo, input, esperado, got. Só aceita linhas em que input
+    e esperado são inteiros (cobre Q2/Q4/Q5); questões multivalor (Q1/Q3/Q6,
+    floats/matrizes) são ignoradas por ambiguidade no texto achatado.
+    """
+    doc = fitz.open(pdf_path)
+    txt = "".join(p.get_text() for p in doc)
+    doc.close()
+
+    parts = re.split(r"Quest[ãa]o\s+(\d+)", txt)
+    out = {}
+    int_re = re.compile(r"^-?\d+$")
+    for i in range(1, len(parts) - 1, 2):
+        qnum, block = parts[i], parts[i + 1]
+        m = re.search(r"Input\s*\n\s*(?:Esperado|Resultado)\s*\n\s*Got", block)
+        if not m:
+            continue
+        region = block[m.end():m.end() + 1500]
+        cases = []
+        for seg in re.split("[\uf057\uf058]", region):
+            lines = [l.strip() for l in seg.split("\n") if l.strip()]
+            if len(lines) >= 2 and int_re.match(lines[0]) and int_re.match(lines[1]):
+                cases.append((lines[0], lines[1]))
+            elif cases:
+                break  # saiu da tabela (gutter de números, histórico, etc.)
+        if cases:
+            out[qnum] = cases
+    return out
+
+
+def pool_testcases(pdfs: list) -> dict:
+    """Junta test cases de vários PDFs por questão (dedup por input)."""
+    per_q = {}
+    for pdf in pdfs:
+        for q, cases in extract_testcases(pdf).items():
+            per_q.setdefault(q, []).append(cases)
+    pooled = {}
+    for q, lists in per_q.items():
+        best = max(lists, key=len)  # lista mais completa de um único PDF
+        seen, dedup = set(), []
+        for inp, exp in best:
+            if inp not in seen:
+                seen.add(inp)
+                dedup.append({"input": inp, "expected_output": exp})
+        pooled[q] = dedup
+    return pooled
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     n_sample = int(args[0]) if args else 10
@@ -61,6 +112,12 @@ def main():
 
     pdfs = sorted(glob.glob(os.path.join(PROVAS_DIR, "*.pdf")))[:n_sample]
     print(f"Amostra: {len(pdfs)} provas | Docker: {use_docker}\n")
+
+    tc_by_q = pool_testcases(pdfs)
+    print("Test cases extraídos por questão (valor único):")
+    for q in sorted(tc_by_q):
+        print(f"  Q{q}: {len(tc_by_q[q])} casos → {tc_by_q[q]}")
+    print()
 
     records = []  # {student, q, code, parse_ok, structures, functions, risky, category, t_static, t_dyn}
     t_static_total = 0.0
@@ -80,9 +137,10 @@ def main():
 
             category = None
             t_dyn = 0.0
+            tcs = tc_by_q.get(q, [])
             if use_docker:
                 t1 = time.perf_counter()
-                dyn = compile_and_run(code, [])
+                dyn = compile_and_run(code, tcs)
                 t_dyn = time.perf_counter() - t1
                 t_dyn_total += t_dyn
                 category = classify_error(dyn, static)["error_category"]
@@ -94,6 +152,7 @@ def main():
                 "functions": [f["name"] for f in static["functions"]],
                 "risky": static["risky_loops"],
                 "category": category,
+                "tested": bool(tcs),
                 "t_static": t_static, "t_dyn": t_dyn,
             })
 
@@ -111,13 +170,19 @@ def main():
 
     if use_docker:
         print(f"EFICIÊNCIA dinâmica (Docker): {t_dyn_total/n:.2f} s/submissão (total {t_dyn_total:.1f}s)")
-        print("\n=== DISTRIBUIÇÃO DE CATEGORIAS (heurísticas) ===")
-        for cat, c in Counter(r["category"] for r in records).most_common():
+        tested = [r for r in records if r["tested"]]
+        untested = [r for r in records if not r["tested"]]
+        print(f"\n=== CATEGORIAS — questões COM test cases ({len(tested)} subs) ===")
+        for cat, c in Counter(r["category"] for r in tested).most_common():
+            print(f"  {c:3d}  {cat}")
+        print(f"\n=== CATEGORIAS — questões SEM test cases ({len(untested)} subs) ===")
+        for cat, c in Counter(r["category"] for r in untested).most_common():
             print(f"  {c:3d}  {cat}")
 
-    # ---------------- CLUSTERING DE UMA QUESTÃO ----------------
+    # ---------------- CLUSTERING DE UMA QUESTÃO (preferir uma com test cases) ----------------
     by_q = Counter(r["q"] for r in records)
-    target_q = by_q.most_common(1)[0][0]
+    tested_qs = [q for q in by_q if any(r["tested"] for r in records if r["q"] == q)]
+    target_q = max(tested_qs or by_q, key=lambda q: by_q[q])
     q_recs = [r for r in records if r["q"] == target_q]
     print(f"\n=== CLUSTERING — Questão {target_q} ({len(q_recs)} alunos) ===")
     if len(q_recs) >= 5 and use_docker:
