@@ -65,6 +65,7 @@ def classify_error(
     compile_error = dynamic_result.get("compile_error", "").lower()
     warnings = dynamic_result.get("warnings", "").lower()
     structures = static_result.get("structures", [])
+    risky_loops = static_result.get("risky_loops", [])
     test_results = dynamic_result.get("test_results", [])
     all_passed = dynamic_result.get("all_tests_passed")
 
@@ -76,6 +77,8 @@ def classify_error(
             return _classify_timeout(structures)
 
         if "segmentation fault" in compile_error or "core dumped" in compile_error:
+            if risky_loops:
+                return _classify_off_by_one(risky_loops, segfault=True)
             return {
                 "error_category": "Acesso Indevido à Memória",
                 "pedagogical_diagnosis": "O programa tentou acessar uma área de memória restrita (Segmentation Fault).",
@@ -116,7 +119,7 @@ def classify_error(
             if any(r["actual_output"] == "TIMEOUT" for r in failed):
                 return _classify_timeout(structures)
             if failed:
-                return _classify_wrong_output(failed, len(test_results))
+                return _classify_wrong_output(failed, len(test_results), risky_loops)
             return {
                 "error_category": "Correto",
                 "pedagogical_diagnosis": f"Todos os {len(test_results)} testes passaram e as estruturas estão corretas.",
@@ -207,8 +210,15 @@ def _classify_function_violation(func_check: dict, found_functions: list) -> dic
     return None
 
 
-def _classify_wrong_output(failed: list, total: int) -> dict:
+def _classify_wrong_output(failed: list, total: int, risky_loops: list = None) -> dict:
     exemplo = failed[0]
+    feedback = "Revise a lógica do programa. Teste manualmente com as entradas indicadas e compare a saída esperada."
+    if risky_loops:
+        loop_vars = sorted({r["var"] for r in risky_loops})
+        feedback += (
+            f" Atenção: o laço com '<=' indexando vetor pela variável {loop_vars} pode acessar "
+            "uma posição além do fim do vetor (off-by-one) — verifique se deveria ser '<'."
+        )
     return {
         "error_category": "Saída Incorreta",
         "pedagogical_diagnosis": (
@@ -216,7 +226,23 @@ def _classify_wrong_output(failed: list, total: int) -> dict:
             f"Exemplo: entrada '{exemplo['input']}' → esperado '{exemplo['expected_output']}', "
             f"obtido '{exemplo['actual_output']}'."
         ),
-        "actionable_feedback": "Revise a lógica do programa. Teste manualmente com as entradas indicadas e compare a saída esperada.",
+        "actionable_feedback": feedback,
+    }
+
+
+def _classify_off_by_one(risky_loops: list, segfault: bool = False) -> dict:
+    loop_vars = sorted({r["var"] for r in risky_loops})
+    base = (
+        f"O laço usa '<=' como limite e indexa um vetor com a variável {loop_vars}. "
+        "Em C os índices válidos vão de 0 a tamanho-1, então '<=' costuma acessar uma "
+        "posição além do fim do vetor (erro off-by-one)."
+    )
+    if segfault:
+        base += " Esse acesso inválido provavelmente causou o Segmentation Fault."
+    return {
+        "error_category": "Acesso Fora dos Limites — Off-by-One",
+        "pedagogical_diagnosis": base,
+        "actionable_feedback": "Troque '<=' por '<' na condição do laço, ou aumente o tamanho do vetor declarado.",
     }
 
 

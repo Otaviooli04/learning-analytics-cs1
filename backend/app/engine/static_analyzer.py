@@ -34,6 +34,7 @@ def extract_control_flow(source_code: str) -> dict:
 
         structures: list[str] = []
         functions: list[dict] = []
+        risky_loops: list[dict] = []
         for node in _walk(root):
             label = _STRUCT_MAP.get(node.type)
             if label is not None:
@@ -43,10 +44,16 @@ def extract_control_flow(source_code: str) -> dict:
                 if fn is not None:
                     functions.append(fn)
 
+            if node.type in ("for_statement", "while_statement"):
+                risky = _risky_loop(node)
+                if risky is not None:
+                    risky_loops.append(risky)
+
         return {
             "success": True,
             "structures": structures,
             "functions": functions,
+            "risky_loops": risky_loops,
             "parse_ok": not root.has_error,
         }
     except Exception as e:  # noqa: BLE001 — rede de segurança; tree-sitter raramente lança
@@ -165,4 +172,53 @@ def _returns_value(body: Node | None) -> bool:
     for node in _walk(body):
         if node.type == "return_statement" and node.named_child_count > 0:
             return True
+    return False
+
+
+def _risky_loop(loop: Node) -> dict | None:
+    """Detecta off-by-one: laço com limite '<=' que indexa um vetor pela variável de controle.
+
+    Restrito a '<=' (limite superior inclusivo) — laços reversos com '>=' até 0 costumam
+    ser corretos, então não são sinalizados para evitar falso-positivo.
+    """
+    condition = loop.child_by_field_name("condition")
+    if condition is None:
+        return None
+
+    var = _inclusive_upper_var(condition)
+    if var is None:
+        return None
+
+    if _indexes_array_with(loop, var):
+        return {"var": var, "op": "<="}
+    return None
+
+
+def _inclusive_upper_var(condition: Node) -> str | None:
+    for node in _walk(condition):
+        if node.type != "binary_expression":
+            continue
+        op = node.child_by_field_name("operator")
+        if op is None or _text(op) != "<=":
+            continue
+        left = node.child_by_field_name("left")
+        right = node.child_by_field_name("right")
+        # variável de controle é o operando identificador (geralmente à esquerda em i<=n)
+        if left is not None and left.type == "identifier":
+            return _text(left)
+        if right is not None and right.type == "identifier":
+            return _text(right)
+    return None
+
+
+def _indexes_array_with(loop: Node, var: str) -> bool:
+    for node in _walk(loop):
+        if node.type != "subscript_expression":
+            continue
+        index = node.child_by_field_name("index")
+        if index is None:
+            continue
+        for inner in _walk(index):
+            if inner.type == "identifier" and _text(inner) == var:
+                return True
     return False
