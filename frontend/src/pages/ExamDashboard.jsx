@@ -126,6 +126,11 @@ export default function ExamDashboard() {
                         Proíbe: {q.forbidden_structures.join(', ')}
                       </span>
                     )}
+                    {q.required_functions?.length > 0 && (
+                      <span className="text-xs text-gray-400">
+                        Funções: {q.required_functions.map(f => f.name).join(', ')}
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-gray-700 line-clamp-2">{q.statement}</p>
                 </div>
