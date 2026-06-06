@@ -210,15 +210,20 @@ Pipeline: features → **UMAP** (redução dimensional, parâmetros adaptativos 
 tamanho da turma) → **HDBSCAN** (agrupamento por densidade) → **silhouette**
 (qualidade) → persistência de clusters + coordenadas 2D para o scatter.
 
-Quatro estratégias de feature extraction (comparadas no estudo de avaliação):
+Cinco estratégias de feature extraction (comparadas no estudo de avaliação):
 `tfidf`, `tfidf_ngram`, `tfidf_category` (one-hot das categorias de erro),
 `tfidf_behavioral` (tfidf + categorias + comportamento: compila?, fração de
-testes passados). Métricas, experimentos e resultados estão documentados à parte
-no estudo de avaliação de clustering.
+testes passados) e `tfidf_functional` (behavioral + features de função:
+nº de funções, recursão, ponteiro, nº máx. de parâmetros).
 
-> Direção planejada: unificar as estratégias num único vetor (léxico + estrutural
-> + categórico + comportamental + funcional) e tratar as "estratégias" como
-> **ablação** para medir a contribuição marginal de cada bloco.
+**Achado empírico (exp1, 7 famílias):** `tfidf_behavioral` continua a melhor
+estratégia (score 0.864); `tfidf_functional` (0.854) é comparável a
+`tfidf_category` mas não supera a behavioral. As features de função mostraram-se
+**redundantes com os sinais léxico+estrutural para o agrupamento** — o valor
+pedagógico das funções está no diagnóstico por questão (heurísticas "Tudo no
+Main", "Recursão Faltando"), não no clustering. Os dados sintéticos passaram a
+derivar o AST do parser real (tree-sitter), tornando a avaliação fiel à produção
+(o que re-baseliniza os scores absolutos em relação a versões anteriores).
 
 ---
 
