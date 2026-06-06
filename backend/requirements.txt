@@ -5,8 +5,9 @@ pydantic
 python-dotenv
 python-multipart
 
-# Analisador estático
-pycparser
+# Analisador estático (tolerante a erros — parseia código que não compila)
+tree-sitter
+tree-sitter-c
 
 # Extração de documentos
 pymupdf

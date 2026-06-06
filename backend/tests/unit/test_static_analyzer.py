@@ -87,7 +87,21 @@ class TestCompatibilidade:
         assert "If" in result["structures"]
         assert "For" in result["structures"]
 
-    def test_codigo_invalido_retorna_falha(self):
-        result = extract_control_flow("int main( { ")
-        assert result["success"] is False
-        assert "error" in result
+    def test_codigo_quebrado_extrai_parcialmente(self):
+        # Robustez: código que não compila ainda rende estruturas parciais.
+        # Trecho real (Prova-1 T1): chaves trocadas, vírgula faltando no scanf.
+        code = (
+            "int main(){ int p,n,media,i; scanf(\"%d %d \", &p &n);"
+            " while(p<n){ i++; } if(n==10){ printf(\"x\",n) }"
+            " if(n==0) printf(\"y\",n); } else{ media=n+n/2; } return 0; }"
+        )
+        result = extract_control_flow(code)
+        assert result["success"] is True
+        assert result["parse_ok"] is False  # há nós de erro
+        assert "While" in result["structures"]
+        assert "If" in result["structures"]
+
+    def test_codigo_valido_tem_parse_ok(self):
+        result = extract_control_flow("int main() { return 0; }")
+        assert result["success"] is True
+        assert result["parse_ok"] is True
