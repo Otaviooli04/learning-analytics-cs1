@@ -23,6 +23,7 @@ class FeatureStrategy(str, Enum):
     TFIDF_NGRAM = "tfidf_ngram"
     TFIDF_CATEGORY = "tfidf_category"
     TFIDF_BEHAVIORAL = "tfidf_behavioral"
+    TFIDF_FUNCTIONAL = "tfidf_functional"
 
 
 class ClusteringResult:
@@ -108,6 +109,8 @@ def _build_features(
         return _build_tfidf_category(codes, ast_lists, submissions)
     if strategy == FeatureStrategy.TFIDF_BEHAVIORAL:
         return _build_tfidf_behavioral(codes, ast_lists, submissions)
+    if strategy == FeatureStrategy.TFIDF_FUNCTIONAL:
+        return _build_tfidf_functional(codes, ast_lists, submissions)
     return _build_tfidf(codes, ast_lists)
 
 
@@ -164,6 +167,47 @@ def _build_tfidf_behavioral(
         onehot_cat,
         behavioral,
     ]).astype(np.float32)
+
+
+def _build_tfidf_functional(
+    codes: list[str],
+    ast_lists: list[list[str]],
+    submissions: List[Submission],
+) -> np.ndarray:
+    tfidf = TfidfVectorizer(
+        analyzer="word",
+        token_pattern=r"[a-zA-Z_][a-zA-Z0-9_]*",
+        ngram_range=(1, 2),
+    )
+    matrix = tfidf.fit_transform(codes)
+    onehot_ast = MultiLabelBinarizer().fit_transform(ast_lists)
+    onehot_cat = _category_onehot(submissions)
+    behavioral = _behavioral_features(submissions)
+    functional = _function_features(submissions)
+    return np.hstack([
+        _dense(hstack([matrix, onehot_ast])),
+        onehot_cat,
+        behavioral,
+        functional,
+    ]).astype(np.float32)
+
+
+def _function_features(submissions: List[Submission]) -> np.ndarray:
+    """Features comportamentais de função, derivadas de ast_functions.
+
+    n_user_functions (exceto main), tem_recursão, tem_param_ponteiro, max_param_count.
+    Submissões sem função (ex.: tudo no main) ficam com vetor ~zero.
+    """
+    rows = []
+    for s in submissions:
+        fns = getattr(s, "ast_functions", None) or []
+        user_fns = [f for f in fns if f.get("name") != "main"]
+        n_user = float(len(user_fns))
+        has_recursion = 1.0 if any(f.get("is_recursive") for f in fns) else 0.0
+        has_pointer = 1.0 if any(f.get("has_pointer_param") for f in fns) else 0.0
+        max_params = float(max((f.get("param_count", 0) for f in fns), default=0))
+        rows.append([n_user, has_recursion, has_pointer, max_params])
+    return np.array(rows, dtype=np.float32)
 
 
 def _category_onehot(submissions: List[Submission]) -> np.ndarray:

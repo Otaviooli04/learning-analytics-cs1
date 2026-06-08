@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { getExam, submitCode } from '../api/exam'
 import Spinner from '../components/Spinner'
 import Badge from '../components/Badge'
+import FunctionCheckCard from '../components/FunctionCheckCard'
 
 export default function SubmitPage() {
   const { id } = useParams()
@@ -120,6 +121,10 @@ export default function SubmitPage() {
               </div>
             )}
           </div>
+
+          {result.function_check && !result.function_check.compliant && (
+            <FunctionCheckCard check={result.function_check} />
+          )}
 
           {result.compile_error && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">

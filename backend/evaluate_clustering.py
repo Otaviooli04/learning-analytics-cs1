@@ -50,6 +50,7 @@ import hdbscan.validity as hdbscan_validity
 from umap import UMAP
 
 from app.ml.cluster import FeatureStrategy, _build_features
+from app.engine.static_analyzer import extract_control_flow
 
 warnings.filterwarnings("ignore")
 
@@ -62,6 +63,7 @@ STRATEGY_LABELS = {
     FeatureStrategy.TFIDF_NGRAM: "tfidf_ngram",
     FeatureStrategy.TFIDF_CATEGORY: "tfidf_category",
     FeatureStrategy.TFIDF_BEHAVIORAL: "tfidf_behavioral",
+    FeatureStrategy.TFIDF_FUNCTIONAL: "tfidf_functional",
 }
 
 ALL_STRATEGIES = list(STRATEGY_LABELS.keys())
@@ -86,6 +88,7 @@ class MockSubmission:
     all_tests_passed: Optional[bool] = None
     test_results: List[MockTestResult] = field(default_factory=list)
     matricula: str = ""
+    ast_functions: list = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +175,36 @@ FAMILIES: dict = {
             "#include <stdio.h>\nint main() {\n    int {VAR} = 0;\n    scanf(\"%d\", &{VAR});\n    printf(\"%d\\n\", {VAR} + {VAR} + 1);\n    return 0;\n}",
         ],
     },
+    # --- Famílias de FUNÇÃO: mesmo error_category, diferem só na estrutura ---
+    # Demonstram o valor das features de função: categoria/comportamento não as
+    # separam (ambas compilam, passam e têm a mesma categoria); só a organização
+    # em funções (n_funções, recursão) distingue.
+    "Solução Monolítica (tudo no main)": {
+        "ast": [],
+        "error_category": "Lógica Estrutural Válida",
+        "compile_error": "",
+        "all_passed": True,
+        "n_passed": 3,
+        "n_total": 3,
+        "templates": [
+            "#include <stdio.h>\nint main() {\n    int {VAR}, {IDX}, fat = 1;\n    scanf(\"%d\", &{VAR});\n    for ({IDX} = 1; {IDX} <= {VAR}; {IDX}++) {\n        fat = fat * {IDX};\n    }\n    printf(\"%d\\n\", fat);\n    return 0;\n}",
+            "#include <stdio.h>\nint main() {\n    int {VAR}, {IDX} = 1, res = 1;\n    scanf(\"%d\", &{VAR});\n    while ({IDX} <= {VAR}) {\n        res = res * {IDX};\n        {IDX}++;\n    }\n    printf(\"%d\\n\", res);\n    return 0;\n}",
+            "#include <stdio.h>\nint main() {\n    int {VAR}, {IDX}, fat = 1;\n    scanf(\"%d\", &{VAR});\n    for ({IDX} = {VAR}; {IDX} > 1; {IDX}--) fat = fat * {IDX};\n    printf(\"%d\\n\", fat);\n    return 0;\n}",
+        ],
+    },
+    "Função Recursiva": {
+        "ast": [],
+        "error_category": "Lógica Estrutural Válida",
+        "compile_error": "",
+        "all_passed": True,
+        "n_passed": 3,
+        "n_total": 3,
+        "templates": [
+            "#include <stdio.h>\nint fat(int {IDX}) {\n    if ({IDX} <= 1) return 1;\n    return {IDX} * fat({IDX} - 1);\n}\nint main() {\n    int {VAR};\n    scanf(\"%d\", &{VAR});\n    printf(\"%d\\n\", fat({VAR}));\n    return 0;\n}",
+            "#include <stdio.h>\nint fatorial(int {VAR}) {\n    if ({VAR} == 0) return 1;\n    return {VAR} * fatorial({VAR} - 1);\n}\nint main() {\n    int {IDX};\n    scanf(\"%d\", &{IDX});\n    printf(\"%d\\n\", fatorial({IDX}));\n    return 0;\n}",
+            "#include <stdio.h>\nint fat(int {IDX}) {\n    if ({IDX} <= 1) {\n        return 1;\n    }\n    return {IDX} * fat({IDX} - 1);\n}\nint main() {\n    int {VAR};\n    scanf(\"%d\", &{VAR});\n    printf(\"%d\\n\", fat({VAR}));\n    return 0;\n}",
+        ],
+    },
 }
 
 FAMILY_NAMES = list(FAMILIES.keys())
@@ -194,10 +227,15 @@ def generate_dataset(
             code = _vary(templates[i % len(templates)], seed=rng.randint(0, 99999))
             n_p, n_t = fam["n_passed"], fam["n_total"]
             test_results = [MockTestResult(passed=(j < n_p)) for j in range(n_t)]
+            # AST derivado do parser REAL (tree-sitter): fiel à produção, inclusive
+            # extração parcial em código que não compila. error_category pode ser
+            # sobrescrito pela família (p/ famílias que diferem só na estrutura).
+            static = extract_control_flow(code)
             submissions.append(MockSubmission(
                 code=code,
-                ast_structures=list(fam["ast"]),
-                error_category=family_name,
+                ast_structures=static.get("structures", []),
+                ast_functions=static.get("functions", []),
+                error_category=fam.get("error_category", family_name),
                 compile_error=fam["compile_error"],
                 all_tests_passed=fam["all_passed"],
                 test_results=test_results,
