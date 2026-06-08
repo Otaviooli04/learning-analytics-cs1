@@ -3,6 +3,23 @@ import tempfile
 import os
 
 
+def _normalize_ws(text: str) -> str:
+    """Normaliza espaços para a comparação de saída, tolerando alinhamento.
+
+    Colapsa espaços internos de cada linha (ex.: `%4d` imprime "   1    2",
+    enquanto a saída esperada extraída do PDF junta tokens com 1 espaço) e
+    descarta linhas em branco nas bordas. Preserva as quebras de linha, pois a
+    estrutura de linhas é significativa (matrizes, listas). Afrouxa apenas o
+    formato horizontal — ordem e número de linhas continuam exigidos.
+    """
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    while lines and not lines[0]:
+        lines.pop(0)
+    while lines and not lines[-1]:
+        lines.pop()
+    return "\n".join(lines)
+
+
 def compile_and_run(source_code: str, test_cases: list[dict]) -> dict:
     with tempfile.TemporaryDirectory() as temp_dir:
         source_path = os.path.join(temp_dir, "student_code.c")
@@ -63,7 +80,7 @@ def compile_and_run(source_code: str, test_cases: list[dict]) -> dict:
                     "input": tc["input"],
                     "expected_output": expected,
                     "actual_output": actual,
-                    "passed": actual == expected,
+                    "passed": _normalize_ws(actual) == _normalize_ws(expected),
                 })
             except subprocess.TimeoutExpired as e:
                 if e.process:
