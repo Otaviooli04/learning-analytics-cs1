@@ -23,6 +23,12 @@ from app.engine.heuristics import classify_error
 
 PROVAS_DIR = "/mnt/c/Users/otavi/Desktop/Provas Fundamentos/Provas-T1"
 
+GLYPH_OK = ""    # ✓ caso passou
+GLYPH_FAIL = ""  # ✗ caso falhou
+# marcadores que encerram a tabela de testes (veredito / solução do autor / rodapé)
+_STOP_WORDS = ("Histórico", "Passo", "Estado", "Pontos", "Seu", "Passou",
+               "Testing", "Show/hide", "Notas", "Mostrar", "Esconder")
+
 
 def extract_submissions(pdf_path: str) -> dict:
     """Retorna {qnum: codigo_final} extraído do histórico do PDF."""
@@ -54,54 +60,135 @@ def extract_submissions(pdf_path: str) -> dict:
     return out
 
 
-def extract_testcases(pdf_path: str) -> dict:
-    """Retorna {qnum: [(input, expected), ...]} para questões de valor único.
+def _join_tokens(toks: list) -> str:
+    """Junta tokens (y, x, palavra) preservando linhas: agrupa por y, ordena por x.
 
-    As tabelas 'Input Esperado Got' têm linhas delimitadas por glifos ✓/✗
-    (\\uf058/\\uf057): glifo, input, esperado, got. Só aceita linhas em que input
-    e esperado são inteiros (cobre Q2/Q4/Q5); questões multivalor (Q1/Q3/Q6,
-    floats/matrizes) são ignoradas por ambiguidade no texto achatado.
+    Para saídas multi-linha (matrizes) reconstrói cada linha pela coordenada Y
+    e mantém a ordem das colunas pela coordenada X.
+    """
+    if not toks:
+        return ""
+    lines = {}
+    for y, x, wd in toks:
+        lines.setdefault(round(y), []).append((x, wd))
+    return "\n".join(
+        " ".join(wd for _, wd in sorted(lines[y]))
+        for y in sorted(lines)
+    )
+
+
+def _parse_tables_on_page(words: list) -> list:
+    """Extrai casos das tabelas Input/Esperado/Got de UMA página via geometria.
+
+    Em vez de linearizar o texto (que mistura as 3 colunas), usa as coordenadas X
+    dos cabeçalhos para separar Input | Esperado | Got, e o X dos glifos ✓/✗ na
+    margem esquerda para delimitar cada linha de teste. Lida com float, string
+    (aprovado/reprovado), entrada multivalor e saída multi-linha (matriz).
+
+    Retorna [{"input", "expected", "got", "passed", "y"}].
+    """
+    rows_out = []
+    for hw in [w for w in words if w[4] == "Input"]:
+        hy = hw[1]
+        same = [w for w in words if abs(w[1] - hy) < 3]
+        esp = next((w for w in same if w[4] in ("Esperado", "Resultado") and w[0] > hw[0]), None)
+        got = next((w for w in same if w[4] == "Got" and w[0] > hw[0]), None)
+        if not (esp and got):
+            continue
+        b1 = esp[0] - 8       # fronteira input | esperado
+        b2 = got[0] - 8       # fronteira esperado | got
+        x_glyph = hw[0] - 8   # tokens à esquerda disto = glifo de margem (início de linha)
+
+        body = sorted((w for w in words if w[1] > hy + 4), key=lambda w: (round(w[1], 1), w[0]))
+        cur = None
+        for x0, y0, x1, y1, word, *_ in body:
+            if any(word.startswith(s) for s in _STOP_WORDS) or "▼" in word or "▸" in word:
+                break  # fim da tabela: veredito / solução do autor / gutter de código
+            if word in (GLYPH_OK, GLYPH_FAIL) and x0 < x_glyph:
+                if cur:
+                    rows_out.append(cur)
+                cur = {"passed": word == GLYPH_OK, "in": [], "esp": [], "got": [], "y": y0}
+                continue
+            if cur is None or word in (GLYPH_OK, GLYPH_FAIL):
+                continue  # ignora glifo de fechamento à direita
+            bucket = "in" if x0 < b1 else "esp" if x0 < b2 else "got"
+            cur[bucket].append((y0, x0, word))
+        if cur:
+            rows_out.append(cur)
+
+    for r in rows_out:
+        # input via stdin é delimitado por espaço — achata em uma linha (também
+        # deduplica casos onde o PDF quebrou a entrada em duas linhas). Já a saída
+        # esperada/got preserva as linhas (matrizes, valores multi-linha).
+        r["input"] = " ".join(
+            wd for _, _, wd in sorted(r.pop("in"), key=lambda t: (round(t[0]), t[1])))
+        r["expected"] = _join_tokens(r.pop("esp"))
+        r["got"] = _join_tokens(r.pop("got"))
+    # input de teste é sempre numérico (n, ints/floats, matrizes) — rejeita linhas
+    # contaminadas por rodapé que escaparam do corte por _STOP_WORDS.
+    return [r for r in rows_out
+            if r["expected"] and re.fullmatch(r"[\d\s.\-]+", r["input"])]
+
+
+def extract_testcases(pdf_path: str) -> dict:
+    """Retorna {qnum: [{"input","expected","passed","clean"}, ...]} via geometria.
+
+    Mapeia cada tabela à questão cujo cabeçalho 'Questão N' a precede na ordem de
+    leitura (carrega o número entre páginas). `clean=True` quando a linha passou e
+    expected==got (alta confiança); casos ambíguos (ex.: matriz mal-alinhada) ficam
+    com clean=False para serem filtrados a jusante.
     """
     doc = fitz.open(pdf_path)
-    txt = "".join(p.get_text() for p in doc)
-    doc.close()
-
-    parts = re.split(r"Quest[ãa]o\s+(\d+)", txt)
     out = {}
-    int_re = re.compile(r"^-?\d+$")
-    for i in range(1, len(parts) - 1, 2):
-        qnum, block = parts[i], parts[i + 1]
-        m = re.search(r"Input\s*\n\s*(?:Esperado|Resultado)\s*\n\s*Got", block)
-        if not m:
-            continue
-        region = block[m.end():m.end() + 1500]
-        cases = []
-        for seg in re.split("[\uf057\uf058]", region):
-            lines = [l.strip() for l in seg.split("\n") if l.strip()]
-            if len(lines) >= 2 and int_re.match(lines[0]) and int_re.match(lines[1]):
-                cases.append((lines[0], lines[1]))
-            elif cases:
-                break  # saiu da tabela (gutter de números, histórico, etc.)
-        if cases:
-            out[qnum] = cases
+    cur_q = None
+    for page in doc:
+        words = page.get_text("words")  # (x0,y0,x1,y1,palavra,bloco,linha,nº)
+        events = []  # (y, "q", num) e (y, "table", row)
+        for x0, y0, x1, y1, word, *_ in words:
+            if word == "Questão":
+                # o número fica logo à direita, ligeiramente acima (estilo superscript)
+                num = next((w[4] for w in words if abs(w[1] - y0) < 8
+                            and 0 < w[0] - x0 < 60 and w[4].isdigit()), None)
+                if num:
+                    events.append((y0, "q", num))
+        for r in _parse_tables_on_page(words):
+            events.append((r["y"], "table", r))
+        for _, kind, payload in sorted(events, key=lambda e: e[0]):
+            if kind == "q":
+                cur_q = payload
+            elif cur_q is not None:
+                clean = payload["passed"] and payload["expected"] == payload["got"]
+                out.setdefault(cur_q, []).append({
+                    "input": payload["input"],
+                    "expected": payload["expected"],
+                    "passed": payload["passed"],
+                    "clean": clean,
+                })
+    doc.close()
     return out
 
 
 def pool_testcases(pdfs: list) -> dict:
-    """Junta test cases de vários PDFs por questão (dedup por input)."""
-    per_q = {}
+    """Monta a suíte oficial por questão juntando as tabelas de todos os alunos.
+
+    A suíte completa aparece nas submissões que passaram em TODOS os casos (linhas
+    ✓ com expected==got). Faz dedup por input e prioriza casos 'clean'; mantém a
+    versão limpa quando o mesmo input aparece sujo em outra prova.
+    """
+    by_q_input = {}  # q -> input -> {"expected","clean","passed"}
     for pdf in pdfs:
         for q, cases in extract_testcases(pdf).items():
-            per_q.setdefault(q, []).append(cases)
+            slot = by_q_input.setdefault(q, {})
+            for c in cases:
+                prev = slot.get(c["input"])
+                if prev is None or (c["clean"] and not prev["clean"]):
+                    slot[c["input"]] = c
     pooled = {}
-    for q, lists in per_q.items():
-        best = max(lists, key=len)  # lista mais completa de um único PDF
-        seen, dedup = set(), []
-        for inp, exp in best:
-            if inp not in seen:
-                seen.add(inp)
-                dedup.append({"input": inp, "expected_output": exp})
-        pooled[q] = dedup
+    for q, slot in by_q_input.items():
+        pooled[q] = [
+            {"input": c["input"], "expected_output": c["expected"]}
+            for c in slot.values()
+        ]
     return pooled
 
 
@@ -114,9 +201,13 @@ def main():
     print(f"Amostra: {len(pdfs)} provas | Docker: {use_docker}\n")
 
     tc_by_q = pool_testcases(pdfs)
-    print("Test cases extraídos por questão (valor único):")
+    print("Test cases extraídos por questão:")
     for q in sorted(tc_by_q):
-        print(f"  Q{q}: {len(tc_by_q[q])} casos → {tc_by_q[q]}")
+        print(f"  Q{q}: {len(tc_by_q[q])} casos")
+        for c in tc_by_q[q]:
+            inp = c["input"].replace("\n", " | ")
+            exp = c["expected_output"].replace("\n", " / ")
+            print(f"      in={inp!r}  ->  esperado={exp!r}")
     print()
 
     records = []  # {student, q, code, parse_ok, structures, functions, risky, category, t_static, t_dyn}
