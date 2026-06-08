@@ -21,6 +21,7 @@ def process_exam_upload(file_bytes: bytes, filename: str, db: Session, turma_id=
             required_structures=q.get("required_structures", []),
             forbidden_structures=q.get("forbidden_structures", []),
             requires_loop=q.get("requires_loop", False),
+            required_functions=q.get("required_functions", []),
         ))
 
     db.commit()

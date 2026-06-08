@@ -52,6 +52,7 @@ class Question(Base):
     required_structures = Column(JSON, default=list)
     forbidden_structures = Column(JSON, default=list)
     requires_loop = Column(Boolean, default=False)
+    required_functions = Column(JSON, default=list)
 
     exam = relationship("Exam", back_populates="questions")
     test_cases = relationship("TestCase", back_populates="question", cascade="all, delete-orphan")
@@ -82,6 +83,7 @@ class Submission(Base):
     pedagogical_diagnosis = Column(Text, default="")
     actionable_feedback = Column(Text, default="")
     ast_structures = Column(JSON, default=list)
+    ast_functions = Column(JSON, default=list)
     cluster_id = Column(Integer, nullable=True)
     umap_x = Column(String, nullable=True)
     umap_y = Column(String, nullable=True)

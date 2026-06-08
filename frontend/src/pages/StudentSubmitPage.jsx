@@ -3,6 +3,16 @@ import { useParams } from 'react-router-dom'
 import { getExam, submitCode } from '../api/exam'
 import Spinner from '../components/Spinner'
 import Badge from '../components/Badge'
+import FunctionCheckCard from '../components/FunctionCheckCard'
+
+function formatRequiredFunction(fn) {
+  const tags = []
+  if (fn.requires_recursion) tags.push('recursiva')
+  if (fn.requires_pointer_param) tags.push('ponteiro')
+  const params = fn.param_count != null ? `(${fn.param_count} param.)` : ''
+  const suffix = tags.length ? ` [${tags.join(', ')}]` : ''
+  return `${fn.name}${params}${suffix}`
+}
 
 export default function StudentSubmitPage() {
   const { examId } = useParams()
@@ -138,6 +148,11 @@ export default function StudentSubmitPage() {
                       Proibido: {currentQuestion.forbidden_structures.join(', ')}
                     </p>
                   )}
+                  {currentQuestion.required_functions?.length > 0 && (
+                    <p className="mt-1 text-xs text-gray-400">
+                      Funções exigidas: <span className="text-purple-600">{currentQuestion.required_functions.map(formatRequiredFunction).join(', ')}</span>
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -183,6 +198,10 @@ export default function StudentSubmitPage() {
                 </div>
               )}
             </div>
+
+            {result.function_check && !result.function_check.compliant && (
+              <FunctionCheckCard check={result.function_check} />
+            )}
 
             {result.compile_error && (
               <div className="bg-white rounded-xl border border-gray-200 p-5">

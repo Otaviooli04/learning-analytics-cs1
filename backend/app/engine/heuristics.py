@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+
+
 def check_structures(found: list, required: list, forbidden: list) -> dict:
     missing = [s for s in required if s not in found]
     prohibited = [s for s in forbidden if s in found]
@@ -8,71 +11,207 @@ def check_structures(found: list, required: list, forbidden: list) -> dict:
     }
 
 
+def _normalize_type(t: str) -> str:
+    return "".join((t or "").split()).lower()
+
+
+def check_functions(found: list, required: list) -> dict:
+    found_by_name = {f["name"]: f for f in found}
+    missing = []
+    sig_mismatches = []
+    missing_recursion = []
+    missing_pointer = []
+
+    for req in required:
+        name = req.get("name")
+        fn = found_by_name.get(name)
+        if fn is None:
+            missing.append(name)
+            continue
+
+        expected_count = req.get("param_count")
+        if expected_count is not None and fn["param_count"] != expected_count:
+            sig_mismatches.append(
+                f"{name}: esperado {expected_count} parâmetro(s), encontrado {fn['param_count']}"
+            )
+
+        expected_return = req.get("return_type")
+        if expected_return and _normalize_type(fn["return_type"]) != _normalize_type(expected_return):
+            sig_mismatches.append(
+                f"{name}: esperado retorno '{expected_return}', encontrado '{fn['return_type']}'"
+            )
+
+        if req.get("requires_recursion") and not fn["is_recursive"]:
+            missing_recursion.append(name)
+
+        if req.get("requires_pointer_param") and not fn["has_pointer_param"]:
+            missing_pointer.append(name)
+
+    compliant = not (missing or sig_mismatches or missing_recursion or missing_pointer)
+    return {
+        "compliant": compliant,
+        "missing_functions": missing,
+        "signature_mismatches": sig_mismatches,
+        "missing_recursion": missing_recursion,
+        "missing_pointer_param": missing_pointer,
+    }
+
+
+@dataclass
+class DiagnosisContext:
+    """Reúne os sinais de entrada que os verificadores consultam."""
+    dyn_success: bool
+    compile_error: str   # minúsculo
+    warnings: str        # minúsculo
+    structures: list
+    functions: list
+    risky_loops: list
+    test_results: list
+    required_structures: list
+    forbidden_structures: list
+    required_functions: list
+
+
+def _build_context(
+    dynamic_result: dict,
+    static_result: dict,
+    required_structures: list,
+    forbidden_structures: list,
+    required_functions: list,
+) -> DiagnosisContext:
+    return DiagnosisContext(
+        dyn_success=dynamic_result.get("success", False),
+        compile_error=dynamic_result.get("compile_error", "").lower(),
+        warnings=dynamic_result.get("warnings", "").lower(),
+        structures=static_result.get("structures", []),
+        functions=static_result.get("functions", []),
+        risky_loops=static_result.get("risky_loops", []),
+        test_results=dynamic_result.get("test_results", []),
+        required_structures=required_structures or [],
+        forbidden_structures=forbidden_structures or [],
+        required_functions=required_functions or [],
+    )
+
+
+# --- Verificadores: cada um retorna um diagnóstico ou None (não se aplica). ---
+# A ordem da lista CHECKERS é a prioridade; o primeiro não-None vence.
+
+def _check_compilation_error(ctx: DiagnosisContext) -> dict | None:
+    if ctx.dyn_success or "error:" not in ctx.compile_error:
+        return None
+    return _classify_compilation_error(ctx.compile_error)
+
+
+def _check_runtime_timeout(ctx: DiagnosisContext) -> dict | None:
+    if ctx.dyn_success or "timeout" not in ctx.compile_error:
+        return None
+    return _classify_timeout(ctx.structures)
+
+
+def _check_segfault(ctx: DiagnosisContext) -> dict | None:
+    if ctx.dyn_success:
+        return None
+    if "segmentation fault" not in ctx.compile_error and "core dumped" not in ctx.compile_error:
+        return None
+    if ctx.risky_loops:
+        return _classify_off_by_one(ctx.risky_loops, segfault=True)
+    return {
+        "error_category": "Acesso Indevido à Memória",
+        "pedagogical_diagnosis": "O programa tentou acessar uma área de memória restrita (Segmentation Fault).",
+        "actionable_feedback": "Verifique se os índices de vetores ultrapassam o limite declarado ou se há ponteiros não inicializados.",
+    }
+
+
+def _check_floating_point(ctx: DiagnosisContext) -> dict | None:
+    if ctx.dyn_success or "floating point exception" not in ctx.compile_error:
+        return None
+    return {
+        "error_category": "Erro Aritmético — Divisão por Zero",
+        "pedagogical_diagnosis": "O programa executou uma divisão por zero em tempo de execução.",
+        "actionable_feedback": "Adicione uma verificação para garantir que o divisor seja diferente de zero antes da operação.",
+    }
+
+
+def _check_warnings(ctx: DiagnosisContext) -> dict | None:
+    if not ctx.dyn_success:
+        return None
+    return _classify_warnings(ctx.warnings)
+
+
+def _check_structure_violation(ctx: DiagnosisContext) -> dict | None:
+    if not ctx.dyn_success:
+        return None
+    struct_check = check_structures(ctx.structures, ctx.required_structures, ctx.forbidden_structures)
+    if not struct_check["compliant"]:
+        return _classify_structure_violation(struct_check)
+    return None
+
+
+def _check_function_violation(ctx: DiagnosisContext) -> dict | None:
+    if not ctx.dyn_success or not ctx.required_functions:
+        return None
+    func_check = check_functions(ctx.functions, ctx.required_functions)
+    if func_check["compliant"]:
+        return None
+    return _classify_function_violation(func_check, ctx.functions)
+
+
+def _check_tests(ctx: DiagnosisContext) -> dict | None:
+    if not ctx.dyn_success or not ctx.test_results:
+        return None
+    failed = [r for r in ctx.test_results if not r["passed"]]
+    if any(r["actual_output"] == "TIMEOUT" for r in failed):
+        return _classify_timeout(ctx.structures)
+    if failed:
+        return _classify_wrong_output(failed, len(ctx.test_results), ctx.risky_loops)
+    return {
+        "error_category": "Correto",
+        "pedagogical_diagnosis": f"Todos os {len(ctx.test_results)} testes passaram e as estruturas estão corretas.",
+        "actionable_feedback": "Solução correta.",
+    }
+
+
+def _check_structural_fallback(ctx: DiagnosisContext) -> dict | None:
+    if not ctx.dyn_success:
+        return None
+    return _classify_success(ctx.structures)
+
+
+CHECKERS = [
+    _check_compilation_error,
+    _check_runtime_timeout,
+    _check_segfault,
+    _check_floating_point,
+    _check_warnings,
+    _check_structure_violation,
+    _check_function_violation,
+    _check_tests,
+    _check_structural_fallback,
+]
+
+_UNKNOWN = {
+    "error_category": "Erro Desconhecido",
+    "pedagogical_diagnosis": "Ocorreu uma falha técnica não classificada pelas regras atuais.",
+    "actionable_feedback": "Consulte os logs técnicos de execução.",
+}
+
+
 def classify_error(
     dynamic_result: dict,
     static_result: dict,
     required_structures: list = None,
     forbidden_structures: list = None,
+    required_functions: list = None,
 ) -> dict:
-    dyn_success = dynamic_result.get("success", False)
-    compile_error = dynamic_result.get("compile_error", "").lower()
-    warnings = dynamic_result.get("warnings", "").lower()
-    structures = static_result.get("structures", [])
-    test_results = dynamic_result.get("test_results", [])
-    all_passed = dynamic_result.get("all_tests_passed")
-
-    if not dyn_success:
-        if "error:" in compile_error:
-            return _classify_compilation_error(compile_error)
-
-        if "timeout" in compile_error:
-            return _classify_timeout(structures)
-
-        if "segmentation fault" in compile_error or "core dumped" in compile_error:
-            return {
-                "error_category": "Acesso Indevido à Memória",
-                "pedagogical_diagnosis": "O programa tentou acessar uma área de memória restrita (Segmentation Fault).",
-                "actionable_feedback": "Verifique se os índices de vetores ultrapassam o limite declarado ou se há ponteiros não inicializados.",
-            }
-
-        if "floating point exception" in compile_error:
-            return {
-                "error_category": "Erro Aritmético — Divisão por Zero",
-                "pedagogical_diagnosis": "O programa executou uma divisão por zero em tempo de execução.",
-                "actionable_feedback": "Adicione uma verificação para garantir que o divisor seja diferente de zero antes da operação.",
-            }
-
-    if dyn_success:
-        warning_diagnosis = _classify_warnings(warnings)
-        if warning_diagnosis:
-            return warning_diagnosis
-
-        req = required_structures or []
-        forb = forbidden_structures or []
-        struct_check = check_structures(structures, req, forb)
-
-        if not struct_check["compliant"]:
-            return _classify_structure_violation(struct_check)
-
-        if test_results:
-            failed = [r for r in test_results if not r["passed"]]
-            if any(r["actual_output"] == "TIMEOUT" for r in failed):
-                return _classify_timeout(structures)
-            if failed:
-                return _classify_wrong_output(failed, len(test_results))
-            return {
-                "error_category": "Correto",
-                "pedagogical_diagnosis": f"Todos os {len(test_results)} testes passaram e as estruturas estão corretas.",
-                "actionable_feedback": "Solução correta.",
-            }
-
-        return _classify_success(structures)
-
-    return {
-        "error_category": "Erro Desconhecido",
-        "pedagogical_diagnosis": "Ocorreu uma falha técnica não classificada pelas regras atuais.",
-        "actionable_feedback": "Consulte os logs técnicos de execução.",
-    }
+    ctx = _build_context(
+        dynamic_result, static_result,
+        required_structures, forbidden_structures, required_functions,
+    )
+    for checker in CHECKERS:
+        result = checker(ctx)
+        if result is not None:
+            return result
+    return dict(_UNKNOWN)
 
 
 def _classify_structure_violation(struct_check: dict) -> dict:
@@ -88,8 +227,77 @@ def _classify_structure_violation(struct_check: dict) -> dict:
     }
 
 
-def _classify_wrong_output(failed: list, total: int) -> dict:
+def _classify_function_violation(func_check: dict, found_functions: list) -> dict | None:
+    missing = func_check["missing_functions"]
+    if missing:
+        user_functions = [f["name"] for f in found_functions if f["name"] != "main"]
+        if not user_functions:
+            return {
+                "error_category": "Tudo no Main",
+                "pedagogical_diagnosis": (
+                    f"O código resolve o problema inteiramente dentro do main, sem definir "
+                    f"a(s) função(ões) exigida(s): {missing}."
+                ),
+                "actionable_feedback": (
+                    "Modularize a solução: extraia a lógica para a(s) função(ões) pedida(s) no "
+                    "enunciado, com o nome e a assinatura corretos."
+                ),
+            }
+        return {
+            "error_category": "Função Ausente",
+            "pedagogical_diagnosis": f"A(s) função(ões) exigida(s) não foi(ram) definida(s): {missing}.",
+            "actionable_feedback": "Implemente a(s) função(ões) com o nome exato indicado no enunciado.",
+        }
+
+    if func_check["signature_mismatches"]:
+        return {
+            "error_category": "Assinatura Incorreta",
+            "pedagogical_diagnosis": (
+                f"Função definida com assinatura diferente da exigida — "
+                f"{'; '.join(func_check['signature_mismatches'])}."
+            ),
+            "actionable_feedback": (
+                "Ajuste o número/tipo de parâmetros e o tipo de retorno conforme o enunciado."
+            ),
+        }
+
+    if func_check["missing_recursion"]:
+        return {
+            "error_category": "Recursão Faltando",
+            "pedagogical_diagnosis": (
+                f"A(s) função(ões) {func_check['missing_recursion']} deveria(m) ser implementada(s) "
+                f"de forma recursiva, mas não fazem chamada a si mesma(s)."
+            ),
+            "actionable_feedback": (
+                "Reescreva a função para que ela chame a si mesma, com um caso base que encerra a recursão."
+            ),
+        }
+
+    if func_check["missing_pointer_param"]:
+        return {
+            "error_category": "Por-Valor vs Por-Referência",
+            "pedagogical_diagnosis": (
+                f"A(s) função(ões) {func_check['missing_pointer_param']} deveria(m) receber parâmetro "
+                f"por referência (ponteiro), mas usa(m) passagem por valor."
+            ),
+            "actionable_feedback": (
+                "Declare o parâmetro como ponteiro (ex: int *x) e use o operador & na chamada para que "
+                "a função altere o valor original."
+            ),
+        }
+
+    return None
+
+
+def _classify_wrong_output(failed: list, total: int, risky_loops: list = None) -> dict:
     exemplo = failed[0]
+    feedback = "Revise a lógica do programa. Teste manualmente com as entradas indicadas e compare a saída esperada."
+    if risky_loops:
+        loop_vars = sorted({r["var"] for r in risky_loops})
+        feedback += (
+            f" Atenção: o laço com '<=' indexando vetor pela variável {loop_vars} pode acessar "
+            "uma posição além do fim do vetor (off-by-one) — verifique se deveria ser '<'."
+        )
     return {
         "error_category": "Saída Incorreta",
         "pedagogical_diagnosis": (
@@ -97,7 +305,23 @@ def _classify_wrong_output(failed: list, total: int) -> dict:
             f"Exemplo: entrada '{exemplo['input']}' → esperado '{exemplo['expected_output']}', "
             f"obtido '{exemplo['actual_output']}'."
         ),
-        "actionable_feedback": "Revise a lógica do programa. Teste manualmente com as entradas indicadas e compare a saída esperada.",
+        "actionable_feedback": feedback,
+    }
+
+
+def _classify_off_by_one(risky_loops: list, segfault: bool = False) -> dict:
+    loop_vars = sorted({r["var"] for r in risky_loops})
+    base = (
+        f"O laço usa '<=' como limite e indexa um vetor com a variável {loop_vars}. "
+        "Em C os índices válidos vão de 0 a tamanho-1, então '<=' costuma acessar uma "
+        "posição além do fim do vetor (erro off-by-one)."
+    )
+    if segfault:
+        base += " Esse acesso inválido provavelmente causou o Segmentation Fault."
+    return {
+        "error_category": "Acesso Fora dos Limites — Off-by-One",
+        "pedagogical_diagnosis": base,
+        "actionable_feedback": "Troque '<=' por '<' na condição do laço, ou aumente o tamanho do vetor declarado.",
     }
 
 

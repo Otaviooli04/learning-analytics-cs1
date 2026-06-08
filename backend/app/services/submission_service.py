@@ -22,6 +22,7 @@ def evaluate_submission(exam_id: int, question_number: str, code: str, db: Sessi
         test_cases,
         question.required_structures or [],
         question.forbidden_structures or [],
+        question.required_functions or [],
     )
 
     if dry_run:
@@ -37,6 +38,7 @@ def evaluate_submission(exam_id: int, question_number: str, code: str, db: Sessi
         pedagogical_diagnosis=result["diagnosis"]["pedagogical_diagnosis"],
         actionable_feedback=result["diagnosis"]["actionable_feedback"],
         ast_structures=result.get("ast_structures", []),
+        ast_functions=result.get("ast_functions", []),
         matricula=matricula,
     )
     db.add(submission)
