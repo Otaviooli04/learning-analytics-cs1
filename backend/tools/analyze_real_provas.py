@@ -270,22 +270,83 @@ def main():
         for cat, c in Counter(r["category"] for r in untested).most_common():
             print(f"  {c:3d}  {cat}")
 
-    # ---------------- CLUSTERING DE UMA QUESTÃO (preferir uma com test cases) ----------------
+    # ---------------- CLUSTERING POR QUESTÃO — suíte completa de métricas ----------------
     by_q = Counter(r["q"] for r in records)
-    tested_qs = [q for q in by_q if any(r["tested"] for r in records if r["q"] == q)]
-    target_q = max(tested_qs or by_q, key=lambda q: by_q[q])
-    q_recs = [r for r in records if r["q"] == target_q]
-    print(f"\n=== CLUSTERING — Questão {target_q} ({len(q_recs)} alunos) ===")
-    if len(q_recs) >= 5 and use_docker:
-        _cluster_real(q_recs)
-    else:
-        print("  (amostra insuficiente ou sem Docker para categorias)")
+    print("\n=== CLUSTERING POR QUESTÃO — suíte completa de métricas ===")
+    print("    (pseudo ground truth = categoria de erro das heurísticas; "
+          "mesmas métricas do experimento sintético)")
+    if not use_docker:
+        print("  (sem Docker: categorias indisponíveis para o pseudo-GT)")
+        return
+
+    # reusa as definições EXATAS do experimento sintético p/ comparabilidade
+    from evaluate_clustering import compute_metrics, weighted_score
+
+    def _fmt(v, w=6, p=3):
+        if v is None:
+            return f"{'-':>{w}}"
+        if isinstance(v, float):
+            return f"{v:>{w}.{p}f}"
+        return f"{v:>{w}}"
+
+    def _row(tag, m):
+        return (f"  {tag:>3} {_fmt(m.get('n_total'), 3, 0)} {_fmt(m.get('n_clusters'), 3, 0)} "
+                f"{_fmt(m['noise_ratio'])} {_fmt(m['silhouette'])} {_fmt(m['dbi'])} "
+                f"{_fmt(m['chi'], 8, 1)} {_fmt(m['dbcv'])} {_fmt(m['purity'])} "
+                f"{_fmt(m['entropy_mean'])} {_fmt(m['nmi'])} {_fmt(m['ari'])} {_fmt(m.get('score'))}")
+
+    print(f"  {'Q':>3} {'n':>3} {'clu':>3} {'noise':>6} {'silh':>6} {'dbi':>6} "
+          f"{'chi':>8} {'dbcv':>6} {'purity':>6} {'entr':>6} {'nmi':>6} {'ari':>6} {'score':>6}")
+
+    metric_rows = []
+    biggest = None
+    for q in sorted(by_q):
+        q_recs = [r for r in records if r["q"] == q and r["tested"]]
+        if len(q_recs) < 5:
+            continue
+        emb, labels, cats, t_cluster = _cluster_real(q_recs)
+        m = compute_metrics(emb, labels, cats, t_cluster)
+        m["score"] = weighted_score(m)
+        metric_rows.append(m)
+        print(_row(str(q), m))
+        if biggest is None or len(q_recs) > len(biggest[2]):
+            biggest = (q, emb, labels, cats)
+
+    if not metric_rows:
+        print("  (nenhuma questão com ≥5 alunos testados)")
+        return
+
+    # média entre questões — panorama agregado p/ a tabela do TCC
+    def _avg(key):
+        vals = [m[key] for m in metric_rows if m.get(key) is not None]
+        return round(sum(vals) / len(vals), 4) if vals else None
+    avg = {k: _avg(k) for k in ("noise_ratio", "silhouette", "dbi", "chi", "dbcv",
+                                "purity", "entropy_mean", "nmi", "ari", "score")}
+    avg["n_total"] = None
+    avg["n_clusters"] = None
+    print("  " + "-" * 92)
+    print(_row("MÉD", avg))
+
+    # composição interpretável da maior questão (pseudo-purity por cluster)
+    q, emb, labels, cats = biggest
+    print(f"\n  Composição dos clusters — Questão {q} ({len(labels)} alunos):")
+    for lab in sorted(set(labels) - {-1}):
+        idx = [i for i in range(len(labels)) if labels[i] == lab]
+        dom = Counter(cats[i] for i in idx).most_common(1)[0]
+        print(f"    cluster {lab}: {len(idx)} alunos, dominante = {dom[0]} ({dom[1]}/{len(idx)})")
+    n_noise = int(np.sum(labels == -1))
+    if n_noise:
+        print(f"    ruído (sem cluster): {n_noise} alunos")
 
 
 def _cluster_real(q_recs):
+    """Features (tfidf+ngram + AST one-hot + categoria one-hot) → UMAP → HDBSCAN.
+
+    Espelha a estratégia `tfidf_behavioral` do experimento sintético.
+    Retorna (emb, labels, cats, tempo) p/ alimentar `compute_metrics`.
+    """
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.preprocessing import MultiLabelBinarizer, OneHotEncoder
-    from sklearn.metrics import silhouette_score
     from scipy.sparse import hstack
     from umap import UMAP
     from hdbscan import HDBSCAN
@@ -305,20 +366,7 @@ def _cluster_real(q_recs):
     emb = UMAP(n_components=min(5, n - 1), n_neighbors=min(15, n - 1),
                random_state=42, min_dist=0.0, init="random").fit_transform(feats)
     labels = HDBSCAN(min_cluster_size=2, min_samples=1).fit_predict(emb)
-    t_cluster = time.perf_counter() - t0
-
-    n_clusters = len(set(labels) - {-1})
-    noise = float(np.mean(labels == -1))
-    mask = labels != -1
-    sil = None
-    if mask.sum() >= 2 and len(set(labels[mask])) >= 2:
-        sil = float(silhouette_score(emb[mask], labels[mask]))
-    print(f"  clusters={n_clusters} | noise={noise:.0%} | silhouette={sil} | tempo={t_cluster:.2f}s")
-    # pseudo-purity via categoria dominante por cluster
-    for lab in sorted(set(labels) - {-1}):
-        idx = [i for i in range(n) if labels[i] == lab]
-        dom = Counter(cats[i] for i in idx).most_common(1)[0]
-        print(f"    cluster {lab}: {len(idx)} alunos, erro dominante = {dom[0]} ({dom[1]}/{len(idx)})")
+    return emb, labels, cats, time.perf_counter() - t0
 
 
 if __name__ == "__main__":
