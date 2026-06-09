@@ -4,7 +4,8 @@ Extrai o código submetido por questão de uma amostra de PDFs, roda análise
 estática (tree-sitter) + dinâmica (Docker GCC) + heurísticas, e mede eficiência
 e qualidade. Faz clustering de uma questão entre os alunos.
 
-Uso: python tools/analyze_real_provas.py [n_amostra] [--no-docker]
+Uso: python tools/analyze_real_provas.py [n_amostra] [--no-docker] [--save]
+  --save grava a suíte de métricas de clustering em results/real_metrics_<n>provas.csv
 """
 import os
 import re
@@ -196,6 +197,7 @@ def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     n_sample = int(args[0]) if args else 10
     use_docker = "--no-docker" not in sys.argv
+    save = "--save" in sys.argv
 
     pdfs = sorted(glob.glob(os.path.join(PROVAS_DIR, "*.pdf")))[:n_sample]
     print(f"Amostra: {len(pdfs)} provas | Docker: {use_docker}\n")
@@ -307,6 +309,7 @@ def main():
         emb, labels, cats, t_cluster = _cluster_real(q_recs)
         m = compute_metrics(emb, labels, cats, t_cluster)
         m["score"] = weighted_score(m)
+        m["questao"] = q
         metric_rows.append(m)
         print(_row(str(q), m))
         if biggest is None or len(q_recs) > len(biggest[2]):
@@ -326,6 +329,20 @@ def main():
     avg["n_clusters"] = None
     print("  " + "-" * 92)
     print(_row("MÉD", avg))
+
+    if save:
+        import csv
+        cols = ["questao", "n_total", "n_clusters", "noise_ratio", "silhouette",
+                "dbi", "chi", "dbcv", "purity", "entropy_mean", "nmi", "ari", "score"]
+        path = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), "..", "results", f"real_metrics_{n_sample}provas.csv"))
+        media = dict(avg, questao="MEDIA")
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(cols)
+            for m in (*metric_rows, media):
+                w.writerow(["" if m.get(c) is None else m.get(c, "") for c in cols])
+        print(f"\n  [salvo] {path}")
 
     # composição interpretável da maior questão (pseudo-purity por cluster)
     q, emb, labels, cats = biggest
@@ -350,6 +367,7 @@ def _cluster_real(q_recs):
     from scipy.sparse import hstack
     from umap import UMAP
     from hdbscan import HDBSCAN
+    from app.ml.cluster import _adaptive_min_cluster_size
 
     codes = [r["code"] for r in q_recs]
     cats = [r["category"] or "?" for r in q_recs]
@@ -365,7 +383,7 @@ def _cluster_real(q_recs):
     t0 = time.perf_counter()
     emb = UMAP(n_components=min(5, n - 1), n_neighbors=min(15, n - 1),
                random_state=42, min_dist=0.0, init="random").fit_transform(feats)
-    labels = HDBSCAN(min_cluster_size=2, min_samples=1).fit_predict(emb)
+    labels = HDBSCAN(min_cluster_size=_adaptive_min_cluster_size(n), min_samples=1).fit_predict(emb)
     return emb, labels, cats, time.perf_counter() - t0
 
 

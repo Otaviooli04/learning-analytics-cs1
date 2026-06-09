@@ -18,6 +18,18 @@ from app.models.orm import QuestionCluster, Submission
 MIN_SUBMISSIONS = 3
 
 
+def _adaptive_min_cluster_size(n: int) -> int:
+    """min_cluster_size proporcional ao tamanho da turma.
+
+    Fixá-lo em 2 super-segmenta turmas maiores: no experimento de sensibilidade
+    (exp2) mcs≈5 é ótimo para n≈56, e na escalabilidade (exp3) n≈98 com mcs=2
+    estoura para 17–26 clusters. Cresce ~n/12 (≈5 em n=56, ≈8 em n=98), limitado
+    a [2, 8] para não colapsar turmas grandes nem exigir grupos grandes demais em
+    turmas pequenas. Heurística-base validada nos experimentos; afinável.
+    """
+    return max(2, min(8, round(n / 12)))
+
+
 class FeatureStrategy(str, Enum):
     TFIDF = "tfidf"
     TFIDF_NGRAM = "tfidf_ngram"
@@ -82,7 +94,7 @@ def cluster_question(
     embedded_cluster = umap_cluster.fit_transform(features)
     embedded_viz = umap_viz.fit_transform(features)
 
-    labels = HDBSCAN(min_cluster_size=2).fit_predict(embedded_cluster)
+    labels = HDBSCAN(min_cluster_size=_adaptive_min_cluster_size(n)).fit_predict(embedded_cluster)
 
     silhouette = _compute_silhouette(embedded_cluster, labels)
 

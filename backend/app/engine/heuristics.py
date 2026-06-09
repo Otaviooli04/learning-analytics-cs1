@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 
 
@@ -156,6 +157,26 @@ def _check_function_violation(ctx: DiagnosisContext) -> dict | None:
     return _classify_function_violation(func_check, ctx.functions)
 
 
+def _check_float_precision(ctx: DiagnosisContext) -> dict | None:
+    """Falhas em que a saída tem os valores certos, só com casas decimais erradas.
+
+    Captura o erro clássico de CS1 (ex.: `%.2f` em vez de `%.3f`) ANTES do
+    fallback genérico de "Saída Incorreta". Só dispara se TODOS os testes que
+    falharam forem diferenças puramente de precisão — se houver qualquer divergência
+    de conteúdo/valor, deixa o checker de testes classificar como lógica incorreta.
+    """
+    if not ctx.dyn_success or not ctx.test_results:
+        return None
+    failed = [r for r in ctx.test_results if not r["passed"]]
+    if not failed or any(r["actual_output"] == "TIMEOUT" for r in failed):
+        return None
+    mismatches = [_precision_mismatch(r["expected_output"], r["actual_output"]) for r in failed]
+    if any(m is None for m in mismatches):
+        return None
+    exp_dec, got_dec = mismatches[0]
+    return _classify_float_precision(exp_dec, got_dec)
+
+
 def _check_tests(ctx: DiagnosisContext) -> dict | None:
     if not ctx.dyn_success or not ctx.test_results:
         return None
@@ -185,6 +206,7 @@ CHECKERS = [
     _check_warnings,
     _check_structure_violation,
     _check_function_violation,
+    _check_float_precision,
     _check_tests,
     _check_structural_fallback,
 ]
@@ -306,6 +328,54 @@ def _classify_wrong_output(failed: list, total: int, risky_loops: list = None) -
             f"obtido '{exemplo['actual_output']}'."
         ),
         "actionable_feedback": feedback,
+    }
+
+
+def _decimals(token: str) -> int | None:
+    """Nº de casas decimais de um token numérico, ou None se não for número."""
+    try:
+        float(token)
+    except ValueError:
+        return None
+    return len(token.split(".", 1)[1]) if "." in token else 0
+
+
+def _precision_mismatch(expected: str, actual: str) -> tuple[int, int] | None:
+    """Diferença SÓ de casas decimais entre esperado e obtido (valores iguais).
+
+    Retorna (casas_esperadas, casas_encontradas) do primeiro token divergente, ou
+    None se houver qualquer diferença de conteúdo (token não-numérico, contagem de
+    tokens distinta, ou valores numéricos realmente diferentes).
+    """
+    exp_toks, act_toks = expected.split(), actual.split()
+    if len(exp_toks) != len(act_toks):
+        return None
+    diff = None
+    for e, a in zip(exp_toks, act_toks):
+        if e == a:
+            continue
+        de, da = _decimals(e), _decimals(a)
+        if de is None or da is None:
+            return None  # token não-numérico difere → não é só precisão
+        if not math.isclose(float(e), float(a), rel_tol=1e-9, abs_tol=1e-9):
+            return None  # valores diferentes → erro de lógica, não de formato
+        if diff is None and de != da:
+            diff = (de, da)
+    return diff
+
+
+def _classify_float_precision(expected_decimals: int, found_decimals: int) -> dict:
+    return {
+        "error_category": "Precisão de Saída — Casas Decimais",
+        "pedagogical_diagnosis": (
+            f"A saída tem os valores numéricos corretos, mas com número de casas "
+            f"decimais diferente do esperado (esperado {expected_decimals}, "
+            f"encontrado {found_decimals})."
+        ),
+        "actionable_feedback": (
+            f"Ajuste o especificador de formato do printf para imprimir "
+            f"{expected_decimals} casa(s) decimal(is) (ex.: \"%.{expected_decimals}f\")."
+        ),
     }
 
 
