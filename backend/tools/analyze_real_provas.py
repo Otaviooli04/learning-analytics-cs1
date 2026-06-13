@@ -22,7 +22,8 @@ import numpy as np
 from app.engine.static_analyzer import extract_control_flow
 from app.engine.heuristics import classify_error
 
-PROVAS_DIR = "/mnt/c/Users/otavi/Desktop/Provas Fundamentos/Provas-T1"
+PROVAS_BASE = "/mnt/c/Users/otavi/Desktop/Provas Fundamentos"
+PROVAS_DIR = os.path.join(PROVAS_BASE, "Provas-T1")  # padrão; sobrescrito por --turma
 
 GLYPH_OK = ""    # ✓ caso passou
 GLYPH_FAIL = ""  # ✗ caso falhou
@@ -199,8 +200,11 @@ def main():
     use_docker = "--no-docker" not in sys.argv
     save = "--save" in sys.argv
 
-    pdfs = sorted(glob.glob(os.path.join(PROVAS_DIR, "*.pdf")))[:n_sample]
-    print(f"Amostra: {len(pdfs)} provas | Docker: {use_docker}\n")
+    turma = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--turma=")), "T1")
+    provas_dir = os.path.join(PROVAS_BASE, f"Provas-{turma}")
+
+    pdfs = sorted(glob.glob(os.path.join(provas_dir, "*.pdf")))[:n_sample]
+    print(f"Turma: {turma} | Amostra: {len(pdfs)} provas | Docker: {use_docker}\n")
 
     tc_by_q = pool_testcases(pdfs)
     print("Test cases extraídos por questão:")
@@ -335,7 +339,7 @@ def main():
         cols = ["questao", "n_total", "n_clusters", "noise_ratio", "silhouette",
                 "dbi", "chi", "dbcv", "purity", "entropy_mean", "nmi", "ari", "score"]
         path = os.path.abspath(os.path.join(
-            os.path.dirname(__file__), "..", "results", f"real_metrics_{n_sample}provas.csv"))
+            os.path.dirname(__file__), "..", "results", f"real_metrics_{turma}_{n_sample}provas.csv"))
         media = dict(avg, questao="MEDIA")
         with open(path, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
