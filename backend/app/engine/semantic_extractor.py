@@ -56,4 +56,12 @@ Retorne apenas o JSON com a chave "questions" contendo a lista de questões de c
     text = response.text.strip()
     text = re.sub(r'^```(?:json)?\s*', '', text)
     text = re.sub(r'\s*```$', '', text)
-    return json.loads(text)
+    data = json.loads(text)
+
+    # O modelo às vezes ignora o invólucro e devolve a lista de questões direto;
+    # normaliza para sempre retornar {"questions": [...]}.
+    if isinstance(data, list):
+        return {"questions": data}
+    if isinstance(data, dict) and "questions" not in data:
+        return {"questions": []}
+    return data
