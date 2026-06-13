@@ -13,6 +13,7 @@ const STRATEGIES = [
   { value: 'tfidf_ngram', label: 'TF-IDF + N-gramas' },
   { value: 'tfidf_category', label: 'TF-IDF + Categoria de erro' },
   { value: 'tfidf_behavioral', label: 'TF-IDF + Comportamental' },
+  { value: 'tfidf_functional', label: 'TF-IDF + Funcional' },
 ]
 
 const CLUSTER_COLORS = ['#7c3aed', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']

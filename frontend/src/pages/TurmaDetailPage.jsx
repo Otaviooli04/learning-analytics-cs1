@@ -46,12 +46,18 @@ function DiffBadge({ rate }) {
 }
 
 const SHORT_LABELS = {
-  'Erro de compilação': 'Compilação',
-  'Erro em tempo de execução': 'Execução',
-  'Falha nos testes': 'Testes',
-  'Uso incorreto de estruturas': 'Estruturas',
-  'Aprovado': 'Aprovado',
-  'Sem diagnóstico': 'Sem diag.',
+  'Erro de Compilação': 'Compilação',
+  'Saída Incorreta': 'Saída incorreta',
+  'Acesso Indevido à Memória': 'Memória',
+  'Acesso Fora dos Limites — Off-by-One': 'Off-by-one',
+  'Loop Infinito — Controle de Fluxo': 'Loop infinito',
+  'Timeout Anômalo': 'Timeout',
+  'Tudo no Main': 'Tudo no main',
+  'Recursão Faltando': 'Sem recursão',
+  'Função Ausente': 'Função ausente',
+  'Assinatura Incorreta': 'Assinatura',
+  'Solução Sequencial — Sem Controle de Fluxo': 'Sem controle',
+  'Erro Desconhecido': 'Desconhecido',
 }
 
 export default function TurmaDetailPage() {

@@ -96,7 +96,8 @@ def get_turma_analytics(turma_id: int, db: Session, professor_id: int | None = N
     aproveitamento_medio = round(sum(pass_rates) / len(pass_rates), 1) if pass_rates else None
 
     error_counter = Counter(
-        s.error_category for s in all_submissions if s.error_category
+        s.error_category for s in all_submissions
+        if s.error_category and s.error_category != "Correto"
     )
     top_erros = [
         {"error_category": cat, "count": cnt}

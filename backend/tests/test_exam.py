@@ -128,7 +128,9 @@ class TestExamResults:
         result = resp.json()["questions"][0]
         assert result["total_submissions"] == 2
         assert result["passed_count"] == 1
-        assert len(result["error_distribution"]) == 2
+        # "Correto" não é erro: a distribuição lista só as categorias de erro
+        assert len(result["error_distribution"]) == 1
+        assert result["error_distribution"][0]["error_category"] == "Saída Incorreta"
 
     def test_results_prova_inexistente_retorna_404(self, client):
         resp = client.get("/exam/99999/results")

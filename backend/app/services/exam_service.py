@@ -46,7 +46,10 @@ def get_exam_results(exam: Exam) -> dict:
         subs = q.submissions
         error_dist = [
             {"error_category": cat, "count": count}
-            for cat, count in Counter(s.error_category for s in subs).most_common()
+            for cat, count in Counter(
+                s.error_category for s in subs
+                if s.error_category and s.error_category != "Correto"
+            ).most_common()
         ]
         questions.append({
             "question_number": q.number,
