@@ -7,6 +7,8 @@ import pytest
 from unittest.mock import patch
 
 from tests.conftest import fastapi_app, get_db, TestingSession
+from app.auth.dependencies import get_current_professor
+from app.models.orm import Professor, Turma
 
 # ---------------------------------------------------------------------------
 # Códigos C reais usados nos testes
@@ -124,9 +126,15 @@ def int_client():
     def override_get_db():
         yield db
 
+    professor = Professor(email="prof@teste.com", nome="Professor Teste", senha_hash="x")
+    db.add(professor)
+    db.commit()
+    db.refresh(professor)
+
     fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_current_professor] = lambda: professor
     with TestClient(fastapi_app) as c:
-        yield c, db
+        yield c, db, professor
     fastapi_app.dependency_overrides.clear()
     db.rollback()
     from tests.conftest import Base, engine
@@ -143,7 +151,7 @@ def int_client():
 @pytest.mark.integration
 class TestDockerGCC:
     def test_compilacao_e_execucao_real(self, int_client):
-        client, db = int_client
+        client, db, professor = int_client
 
         # Cria prova e questão diretamente (sem chamar Gemini)
         from app.models.orm import Exam, Question, TestCase
@@ -178,7 +186,7 @@ class TestDockerGCC:
         assert data["diagnosis"]["error_category"] == "Correto"
 
     def test_saida_incorreta_real(self, int_client):
-        client, db = int_client
+        client, db, professor = int_client
 
         from app.models.orm import Exam, Question, TestCase
         exam = Exam(filename="prova.pdf", raw_text="texto")
@@ -203,7 +211,7 @@ class TestDockerGCC:
         assert data["diagnosis"]["error_category"] == "Saída Incorreta"
 
     def test_erro_de_compilacao_real(self, int_client):
-        client, db = int_client
+        client, db, professor = int_client
 
         from app.models.orm import Exam, Question
         exam = Exam(filename="prova.pdf", raw_text="texto")
@@ -229,7 +237,7 @@ class TestDockerGCC:
 @pytest.mark.integration
 class TestGeminiReal:
     def test_upload_extrai_questoes_com_gemini_real(self, int_client):
-        client, db = int_client
+        client, db, professor = int_client
 
         with patch("app.services.exam_service.parse_document", return_value=(
             "Questão 1: Escreva um programa em C que leia um número inteiro e "
@@ -248,12 +256,15 @@ class TestGeminiReal:
         assert len(q["statement"]) > 10
 
     def test_insights_com_gemini_real(self, int_client):
-        client, db = int_client
+        client, db, professor = int_client
 
         from app.models.orm import Exam, Question, QuestionCluster, Submission
         from datetime import datetime, timezone
 
-        exam = Exam(filename="prova.pdf", raw_text="texto")
+        turma = Turma(nome="Turma Teste", codigo="TT", professor_id=professor.id)
+        db.add(turma)
+        db.flush()
+        exam = Exam(filename="prova.pdf", raw_text="texto", turma_id=turma.id)
         db.add(exam)
         db.flush()
         q = Question(
@@ -307,13 +318,16 @@ class TestFluxoCompleto:
         4. Roda clustering (UMAP + HDBSCAN reais)
         5. Gera insights com Gemini real
         """
-        client, db = int_client
+        client, db, professor = int_client
 
         from app.models.orm import Exam, Question, TestCase, Submission
         from app.models.orm import QuestionCluster
 
         # 1. Cria prova
-        exam = Exam(filename="prova_e2e.pdf", raw_text="texto")
+        turma = Turma(nome="Turma Teste", codigo="TT", professor_id=professor.id)
+        db.add(turma)
+        db.flush()
+        exam = Exam(filename="prova_e2e.pdf", raw_text="texto", turma_id=turma.id)
         db.add(exam)
         db.flush()
         q = Question(
@@ -574,12 +588,15 @@ int main() {
 """
 
     def test_clustering_com_20_submissoes_diversas(self, int_client):
-        client, db = int_client
+        client, db, professor = int_client
 
         from app.models.orm import Exam, Question, TestCase, Submission, QuestionCluster
 
         # Prova e questão
-        exam = Exam(filename="prova_diversidade.pdf", raw_text="texto")
+        turma = Turma(nome="Turma Teste", codigo="TT", professor_id=professor.id)
+        db.add(turma)
+        db.flush()
+        exam = Exam(filename="prova_diversidade.pdf", raw_text="texto", turma_id=turma.id)
         db.add(exam)
         db.flush()
         q = Question(
