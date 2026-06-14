@@ -17,8 +17,8 @@ export const getResults = (examId) => api.get(`/exam/${examId}/results`)
 export const runClustering = (examId, questionNumber, strategy) =>
   api.post(`/exam/${examId}/questions/${questionNumber}/cluster?strategy=${strategy}`)
 
-export const runInsights = (examId, questionNumber) =>
-  api.post(`/exam/${examId}/questions/${questionNumber}/insights`)
+export const runInsights = (examId, questionNumber, force = false) =>
+  api.post(`/exam/${examId}/questions/${questionNumber}/insights${force ? '?force=true' : ''}`)
 
 export const submitCode = (examId, questionNumber, code, matricula = '', dryRun = false) =>
   api.post('/submission/evaluate', {

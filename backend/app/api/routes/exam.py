@@ -233,6 +233,7 @@ def run_clustering(
 def run_insights(
     exam_id: int,
     question_number: str,
+    force: bool = Query(default=False),
     db: Session = Depends(get_db),
     professor: Professor = Depends(get_current_professor),
 ):
@@ -240,22 +241,43 @@ def run_insights(
     clusters_db = db.query(QuestionCluster).filter(QuestionCluster.question_id == question.id).all()
     if not clusters_db:
         raise HTTPException(status_code=422, detail="Nenhum cluster encontrado. Execute o clustering antes de gerar insights.")
-    clusters_payload = [
-        {
-            "cluster_id": qc.cluster_label,
-            "size": qc.size,
-            "dominant_error": qc.dominant_error,
-            "representative_code": qc.representative.code if qc.representative else "",
-        }
-        for qc in clusters_db
-    ]
-    try:
-        raw_insights = generate_cluster_insights(question.statement, clusters_payload)
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+
+    # Só gera via Gemini os clusters ainda sem insight salvo (ou todos se force).
+    # O insight fica persistido em QuestionCluster; re-clusterizar apaga as linhas
+    # e invalida o cache naturalmente.
+    pending = [qc for qc in clusters_db if force or not qc.insight]
+    if pending:
+        payload = [
+            {
+                "cluster_id": qc.cluster_label,
+                "size": qc.size,
+                "dominant_error": qc.dominant_error,
+                "representative_code": qc.representative.code if qc.representative else "",
+            }
+            for qc in pending
+        ]
+        try:
+            generated = generate_cluster_insights(question.statement, payload)
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        by_label = {qc.cluster_label: qc for qc in pending}
+        for item in generated:
+            qc = by_label.get(item["cluster_id"])
+            if qc is not None:
+                qc.insight = item["insight"]
+        db.commit()
+
     return InsightsResponse(
         question_number=question_number,
-        insights=[ClusterInsight(**i) for i in raw_insights],
+        insights=[
+            ClusterInsight(
+                cluster_id=qc.cluster_label,
+                size=qc.size,
+                dominant_error=qc.dominant_error,
+                insight=qc.insight or "",
+            )
+            for qc in clusters_db
+        ],
     )
 
 

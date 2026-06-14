@@ -102,6 +102,7 @@ class QuestionCluster(Base):
     cluster_label = Column(Integer)
     size = Column(Integer)
     dominant_error = Column(String, default="")
+    insight = Column(Text, default="")
     representative_submission_id = Column(Integer, ForeignKey("submissions.id"), nullable=True)
 
     question = relationship("Question")
