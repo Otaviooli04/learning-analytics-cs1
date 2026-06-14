@@ -42,6 +42,11 @@ Thumbs.db
 annotations.txt
 CLAUDE.md
 
+# Artefatos gerados / dados locais (regeneráveis ou descartáveis)
+backend/results/plots/
+backend/comparacao_demo.png
+submissoes_par_impar.zip
+
 # Logs
 *.log
 logs/
