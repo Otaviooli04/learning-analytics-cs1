@@ -82,9 +82,11 @@ def compile_and_run(source_code: str, test_cases: list[dict]) -> dict:
                     "actual_output": actual,
                     "passed": _normalize_ws(actual) == _normalize_ws(expected),
                 })
-            except subprocess.TimeoutExpired as e:
-                if e.process:
-                    e.process.kill()
+            except subprocess.TimeoutExpired:
+                # subprocess.run já mata e aguarda o filho antes de relançar; só
+                # registramos o veredito de TIMEOUT. (TimeoutExpired não expõe
+                # .process — o acesso anterior derrubava a avaliação inteira quando
+                # uma submissão travava além dos 7s de backup.)
                 test_results.append({
                     "input": tc["input"],
                     "expected_output": tc["expected_output"],
