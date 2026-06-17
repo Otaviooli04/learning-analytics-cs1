@@ -20,6 +20,11 @@ export function AuthProvider({ children }) {
     setProfessor(professorData)
   }, [])
 
+  const updateProfessor = useCallback((professorData) => {
+    localStorage.setItem(PROFESSOR_KEY, JSON.stringify(professorData))
+    setProfessor(professorData)
+  }, [])
+
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(PROFESSOR_KEY)
@@ -38,7 +43,7 @@ export function AuthProvider({ children }) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <AuthContext.Provider value={{ professor, token, login, logout, loading, isAuthenticated: !!token }}>
+    <AuthContext.Provider value={{ professor, token, login, logout, updateProfessor, loading, isAuthenticated: !!token }}>
       {children}
     </AuthContext.Provider>
   )

@@ -95,7 +95,9 @@ export default function TestCasesPage() {
       <div className="flex items-center gap-2 text-sm text-gray-400 mb-6">
         <Link to={`/exam/${id}`} className="hover:text-gray-600">Prova #{id}</Link>
         <span>›</span>
-        <span className="text-gray-600">Questão {num} — Test cases</span>
+        <span>Questão {num}</span>
+        <span>›</span>
+        <span className="text-gray-600">Test cases</span>
       </div>
 
       <h1 className="text-xl font-semibold text-gray-900 mb-1">Test cases</h1>

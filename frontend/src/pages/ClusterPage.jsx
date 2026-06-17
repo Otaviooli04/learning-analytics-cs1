@@ -40,7 +40,7 @@ export default function ClusterPage() {
       const { data } = await runClustering(id, num, strategy)
       setResult(data)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Erro ao executar clustering.')
+      setError(e.response?.data?.detail || 'Erro ao executar agrupamento.')
     } finally {
       setRunning(false)
     }
@@ -58,12 +58,14 @@ export default function ClusterPage() {
       <div className="flex items-center gap-2 text-sm text-gray-400 mb-6">
         <Link to={`/exam/${id}`} className="hover:text-gray-600">Prova #{id}</Link>
         <span>›</span>
-        <span className="text-gray-600">Questão {num} — Clustering</span>
+        <span>Questão {num}</span>
+        <span>›</span>
+        <span className="text-gray-600">Agrupamento</span>
       </div>
 
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Clustering</h1>
+          <h1 className="text-xl font-semibold text-gray-900">Agrupamento</h1>
           {question && <p className="text-sm text-gray-500 mt-1 line-clamp-1">{question.statement}</p>}
         </div>
         <Link
@@ -94,7 +96,7 @@ export default function ClusterPage() {
             className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {running && <Spinner className="w-4 h-4" />}
-            {running ? 'Executando…' : 'Executar clustering'}
+            {running ? 'Executando…' : 'Executar agrupamento'}
           </button>
         </div>
       </div>
@@ -109,7 +111,7 @@ export default function ClusterPage() {
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <Badge color="purple">{result.total_submissions} submissões</Badge>
-            <Badge color="gray">{result.clusters.length} clusters</Badge>
+            <Badge color="gray">{result.clusters.length} grupos</Badge>
             {result.silhouette_score != null && (
               <Badge color={result.silhouette_score >= 0.5 ? 'green' : result.silhouette_score >= 0.25 ? 'yellow' : 'gray'}>
                 Silhouette: {result.silhouette_score.toFixed(3)}
@@ -133,7 +135,7 @@ export default function ClusterPage() {
                 {result.clusters.map((c, i) => (
                   <Scatter
                     key={c.cluster_id}
-                    name={`Cluster ${c.cluster_id} (${c.dominant_error})`}
+                    name={`Grupo ${c.cluster_id} (${c.dominant_error})`}
                     data={scatterByCluster(c)}
                     fill={CLUSTER_COLORS[i % CLUSTER_COLORS.length]}
                   />
@@ -157,7 +159,7 @@ export default function ClusterPage() {
                       className="w-3 h-3 rounded-full shrink-0"
                       style={{ backgroundColor: CLUSTER_COLORS[i % CLUSTER_COLORS.length] }}
                     />
-                    <span className="text-sm font-medium text-gray-800">Cluster {c.cluster_id}</span>
+                    <span className="text-sm font-medium text-gray-800">Grupo {c.cluster_id}</span>
                     <span className="ml-auto text-xs text-gray-400">{c.size} aluno{c.size !== 1 ? 's' : ''}</span>
                   </div>
                   <Badge color="gray">{c.dominant_error}</Badge>

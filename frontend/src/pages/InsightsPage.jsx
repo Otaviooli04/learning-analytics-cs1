@@ -37,7 +37,9 @@ export default function InsightsPage() {
       <div className="flex items-center gap-2 text-sm text-gray-400 mb-6">
         <Link to={`/exam/${id}`} className="hover:text-gray-600">Prova #{id}</Link>
         <span>›</span>
-        <Link to={`/exam/${id}/questions/${num}/cluster`} className="hover:text-gray-600">Questão {num} — Clustering</Link>
+        <span>Questão {num}</span>
+        <span>›</span>
+        <Link to={`/exam/${id}/questions/${num}/cluster`} className="hover:text-gray-600">Agrupamento</Link>
         <span>›</span>
         <span className="text-gray-600">Insights LLM</span>
       </div>
@@ -51,7 +53,7 @@ export default function InsightsPage() {
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <p className="text-sm text-gray-600 mb-4">
-          O Gemini analisa o código representativo de cada cluster e gera um insight pedagógico com o padrão de dificuldade do grupo e uma sugestão de intervenção didática. Os insights ficam salvos: reabrir esta página não gasta novas chamadas — só "Regerar" consulta o Gemini de novo.
+          O Gemini analisa o código representativo de cada grupo e gera um insight pedagógico com o padrão de dificuldade do grupo e uma sugestão de intervenção didática. Os insights ficam salvos: reabrir esta página não gasta novas chamadas. Só "Regerar" consulta o Gemini de novo.
         </p>
         <div className="flex items-center gap-2">
           <button
@@ -88,7 +90,7 @@ export default function InsightsPage() {
                   className="w-3 h-3 rounded-full shrink-0"
                   style={{ backgroundColor: CLUSTER_COLORS[i % CLUSTER_COLORS.length] }}
                 />
-                <span className="text-sm font-medium text-gray-800">Cluster {ins.cluster_id}</span>
+                <span className="text-sm font-medium text-gray-800">Grupo {ins.cluster_id}</span>
                 <Badge color="gray">{ins.size} aluno{ins.size !== 1 ? 's' : ''}</Badge>
                 <Badge color="red">{ins.dominant_error}</Badge>
               </div>

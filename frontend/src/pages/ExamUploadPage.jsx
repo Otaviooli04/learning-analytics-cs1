@@ -27,7 +27,8 @@ export default function ExamUploadPage() {
     setUploading(true)
     try {
       const { data } = await uploadExam(file, turmaId)
-      navigate(`/exam/${data.id}`)
+      // A extração das questões roda em segundo plano; o dashboard exibe o progresso.
+      navigate(`/exam/${data.exam_id}`)
     } catch (e) {
       setError(e.response?.data?.detail || 'Erro ao processar a prova. Tente novamente.')
     } finally {
@@ -83,7 +84,7 @@ export default function ExamUploadPage() {
         {uploading ? (
           <div className="flex flex-col items-center gap-3">
             <Spinner className="w-8 h-8 text-purple-600" />
-            <p className="text-sm text-gray-500">Processando com Gemini…</p>
+            <p className="text-sm text-gray-500">Enviando arquivo…</p>
           </div>
         ) : (
           <>

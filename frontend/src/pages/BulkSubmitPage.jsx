@@ -1,12 +1,12 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { bulkSubmit } from '../api/exam'
+import { bulkSubmit, getJob } from '../api/exam'
 import Spinner from '../components/Spinner'
 
 const FORMAT_OPTIONS = [
   {
     id: 'by_student',
-    label: 'Opção A — Por aluno',
+    label: 'Opção A: por aluno',
     description: 'Pasta = nome do aluno, arquivo = número da questão.',
     example: [
       'respostas.zip',
@@ -20,7 +20,7 @@ const FORMAT_OPTIONS = [
   },
   {
     id: 'by_question',
-    label: 'Opção B — Por questão',
+    label: 'Opção B: por questão',
     description: 'Pasta = número da questão, arquivo = nome do aluno.',
     example: [
       'respostas.zip',
@@ -40,6 +40,7 @@ export default function BulkSubmitPage() {
   const [format, setFormat] = useState('by_student')
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [job, setJob] = useState(null)     // job de avaliação em segundo plano
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
 
@@ -51,10 +52,11 @@ export default function BulkSubmitPage() {
     }
     setError('')
     setResult(null)
+    setJob(null)
     setUploading(true)
     try {
       const { data } = await bulkSubmit(id, file, format)
-      setResult(data)
+      setJob({ id: data.job_id, status: 'pending', processed: 0, total: 0, stage: 'Iniciando…' })
     } catch (e) {
       const msg = e.response?.data?.detail || e.message || 'Erro desconhecido'
       setError(msg)
@@ -62,6 +64,23 @@ export default function BulkSubmitPage() {
       setUploading(false)
     }
   }
+
+  // Acompanha o job em background; ao concluir, mostra a tabela de resultados.
+  // O usuário pode sair desta página — o indicador global continua o progresso.
+  useEffect(() => {
+    if (!job || job.status === 'done' || job.status === 'error') return
+    const t = setInterval(async () => {
+      try {
+        const { data } = await getJob(job.id)
+        setJob(data)
+        if (data.status === 'done') setResult(data.result)
+        if (data.status === 'error') setError(data.message || 'Erro ao processar as submissões.')
+      } catch { /* silencioso */ }
+    }, 1500)
+    return () => clearInterval(t)
+  }, [job?.id, job?.status])
+
+  const processing = uploading || (job && job.status !== 'done' && job.status !== 'error')
 
   const onDrop = (e) => {
     e.preventDefault()
@@ -106,7 +125,7 @@ export default function BulkSubmitPage() {
 
       {/* Exemplo da estrutura */}
       <div className="bg-gray-900 rounded-xl p-4 mb-6">
-        <p className="text-xs text-gray-400 mb-2 font-medium">{selectedFormat.label} — estrutura esperada</p>
+        <p className="text-xs text-gray-400 mb-2 font-medium">Estrutura esperada do ZIP</p>
         <pre className="text-xs font-mono text-green-400 leading-relaxed">
           {selectedFormat.example.join('\n')}
         </pre>
@@ -114,7 +133,7 @@ export default function BulkSubmitPage() {
       </div>
 
       {/* Upload */}
-      {!result && !uploading && (
+      {!result && !processing && (
         <div
           onClick={() => inputRef.current.click()}
           onDragOver={e => { e.preventDefault(); setDragging(true) }}
@@ -142,19 +161,27 @@ export default function BulkSubmitPage() {
         </div>
       )}
 
-      {/* Loading */}
-      {uploading && (
+      {/* Progresso (em segundo plano) */}
+      {processing && (
         <div className="bg-white rounded-xl border border-purple-200 p-8 text-center">
           <Spinner className="w-8 h-8 text-purple-600 mx-auto mb-4" />
-          <p className="text-sm font-medium text-gray-800 mb-1">Processando submissões…</p>
-          <p className="text-xs text-gray-500 mb-4">
-            Cada código é compilado e executado em Docker — um container por test case. Com 12 submissões e 4 test cases cada, isso pode levar <strong>2 a 3 minutos</strong>. Não feche a página.
+          <p className="text-sm font-medium text-gray-800 mb-1">
+            {uploading ? 'Enviando arquivo…' : (job?.stage || 'Avaliando submissões…')}
           </p>
-          <div className="flex items-center justify-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-            <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-            <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '300ms' }} />
-          </div>
+          <p className="text-xs text-gray-500 mb-4">
+            A avaliação roda em segundo plano (Docker por test case). Você pode <strong>sair desta página</strong> e acompanhar pelo indicador de progresso no canto da tela.
+          </p>
+          {job && job.total > 0 && (
+            <>
+              <div className="w-full max-w-md mx-auto bg-purple-100 rounded-full h-2">
+                <div
+                  className="h-2 rounded-full bg-purple-500 transition-all"
+                  style={{ width: `${Math.round((job.processed / job.total) * 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-2">{job.processed} / {job.total} arquivos</p>
+            </>
+          )}
         </div>
       )}
 
@@ -210,7 +237,7 @@ export default function BulkSubmitPage() {
 
           <div className="flex gap-3">
             <button
-              onClick={() => { setResult(null); setError('') }}
+              onClick={() => { setResult(null); setError(''); setJob(null) }}
               className="text-sm px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 transition-colors"
             >
               Enviar outro ZIP
