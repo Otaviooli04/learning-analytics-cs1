@@ -44,6 +44,19 @@ int main() {
 }
 """
 
+# Usa math.h (sqrt com valor de runtime): exige linkar a libm (-lm). Serve de
+# regressão para o fix do linker — sem -lm o gcc dá "undefined reference".
+CODE_SQRT_MATH = """\
+#include <stdio.h>
+#include <math.h>
+int main() {
+    double x;
+    scanf("%lf", &x);
+    printf("%.2f\\n", sqrt(x));
+    return 0;
+}
+"""
+
 CODE_SOMA_CORRETO = """\
 #include <stdio.h>
 int main() {
@@ -210,6 +223,34 @@ class TestDockerGCC:
         assert data["all_tests_passed"] is False
         assert data["diagnosis"]["error_category"] == "Saída Incorreta"
 
+    def test_codigo_com_math_h_linka_libm(self, int_client):
+        """Regressão do fix -lm: código de CS1 com sqrt/pow (math.h) deve compilar
+        e passar — sem -lm o gcc reprova código correto com 'undefined reference'."""
+        client, db, professor = int_client
+
+        from app.models.orm import Exam, Question, TestCase
+        exam = Exam(filename="prova.pdf", raw_text="texto")
+        db.add(exam)
+        db.flush()
+        q = Question(exam_id=exam.id, number="1", statement="Raiz quadrada",
+                     required_structures=[], forbidden_structures=[], requires_loop=False)
+        db.add(q)
+        db.flush()
+        db.add(TestCase(question_id=q.id, input="16", expected_output="4.00"))
+        db.add(TestCase(question_id=q.id, input="2", expected_output="1.41"))
+        db.commit()
+
+        resp = client.post("/submission/evaluate", json={
+            "exam_id": exam.id,
+            "question_number": "1",
+            "code": CODE_SQRT_MATH,
+        })
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["compile_error"] == ""
+        assert data["all_tests_passed"] is True
+
     def test_erro_de_compilacao_real(self, int_client):
         client, db, professor = int_client
 
@@ -239,19 +280,30 @@ class TestGeminiReal:
     def test_upload_extrai_questoes_com_gemini_real(self, int_client):
         client, db, professor = int_client
 
+        # A extração roda em segundo plano via thread; no teste, executamos o job
+        # de forma síncrona na sessão de teste (a thread real usa o banco de produção).
+        def run_sync(job_id, target):
+            target(db, job_id)
+
+        # Enviamos como DOCX para o extrator usar o texto mockado (caminho de
+        # texto). Com PDF, a rota mandaria o arquivo nativo ao Gemini e o
+        # MINIMAL_PDF (vazio) não tem questão a extrair.
         with patch("app.services.exam_service.parse_document", return_value=(
             "Questão 1: Escreva um programa em C que leia um número inteiro e "
             "imprima 'par' se for par ou 'impar' se for ímpar, usando if/else."
-        )):
+        )), patch("app.services.exam_service.run_in_background", side_effect=run_sync):
             resp = client.post(
                 "/exam/upload",
-                files={"file": ("prova.pdf", MINIMAL_PDF, "application/pdf")},
+                files={"file": ("prova.docx", b"docx-fake",
+                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
             )
 
         assert resp.status_code == 200
-        data = resp.json()
-        assert len(data["questions"]) >= 1
-        q = data["questions"][0]
+        exam_id = resp.json()["exam_id"]
+
+        exam = client.get(f"/exam/{exam_id}").json()
+        assert len(exam["questions"]) >= 1
+        q = exam["questions"][0]
         assert q["number"] is not None
         assert len(q["statement"]) > 10
 

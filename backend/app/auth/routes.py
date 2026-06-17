@@ -2,10 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_professor
-from app.auth.service import authenticate_professor, create_access_token, register_professor
+from app.auth.service import (
+    authenticate_professor, create_access_token, hash_password, register_professor, verify_password,
+)
 from app.models.database import get_db
 from app.models.orm import Professor
-from app.models.schemas import ProfessorCreate, ProfessorResponse, TokenResponse
+from app.models.schemas import (
+    PasswordChange, ProfessorCreate, ProfessorResponse, ProfessorUpdate, TokenResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -36,6 +40,30 @@ def login(body: ProfessorCreate, db: Session = Depends(get_db)):
 @router.get("/me", response_model=ProfessorResponse)
 def me(current: Professor = Depends(get_current_professor)):
     return _to_response(current)
+
+
+@router.put("/me", response_model=ProfessorResponse)
+def update_me(
+    body: ProfessorUpdate,
+    db: Session = Depends(get_db),
+    current: Professor = Depends(get_current_professor),
+):
+    current.nome = body.nome.strip()
+    db.commit()
+    db.refresh(current)
+    return _to_response(current)
+
+
+@router.put("/me/password", status_code=204)
+def change_password(
+    body: PasswordChange,
+    db: Session = Depends(get_db),
+    current: Professor = Depends(get_current_professor),
+):
+    if not verify_password(body.senha_atual, current.senha_hash):
+        raise HTTPException(status_code=400, detail="Senha atual incorreta.")
+    current.senha_hash = hash_password(body.senha_nova)
+    db.commit()
 
 
 def _to_response(p: Professor) -> ProfessorResponse:

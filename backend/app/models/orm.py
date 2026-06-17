@@ -120,3 +120,23 @@ class SubmissionTestResult(Base):
     passed = Column(Boolean)
 
     submission = relationship("Submission", back_populates="test_results")
+
+
+class ProcessingJob(Base):
+    """Rastreia tarefas longas (extração da prova via Gemini, avaliação em lote)
+    executadas em segundo plano, para que o usuário acompanhe o progresso sem
+    ficar preso à requisição."""
+    __tablename__ = "processing_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    kind = Column(String)                       # 'exam_upload' | 'bulk_submit'
+    status = Column(String, default="pending")  # pending | running | done | error
+    stage = Column(String, default="")          # descrição legível da etapa atual
+    total = Column(Integer, default=0)
+    processed = Column(Integer, default=0)
+    message = Column(Text, default="")
+    result = Column(JSON, default=dict)
+    exam_id = Column(Integer, ForeignKey("exams.id"), nullable=True)
+    professor_id = Column(Integer, ForeignKey("professors.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

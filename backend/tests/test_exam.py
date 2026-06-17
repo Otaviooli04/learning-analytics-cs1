@@ -37,19 +37,25 @@ def _mock_gemini_client(response_text: str):
 
 
 class TestExamUpload:
-    def test_upload_cria_prova_e_questoes(self, client):
+    def test_upload_cria_prova_e_questoes(self, client, run_jobs_sync):
         parse, gemini = _mock_upload_dependencies()
         with parse, gemini:
             resp = client.post(
                 "/exam/upload",
                 files={"file": ("prova.pdf", FAKE_PDF_BYTES, "application/pdf")},
             )
+        # O upload é assíncrono: a rota cria a prova e dispara a extração em job.
         assert resp.status_code == 200
         data = resp.json()
-        assert data["filename"] == "prova.pdf"
-        assert len(data["questions"]) == 1
-        assert data["questions"][0]["number"] == "1"
-        assert data["questions"][0]["required_structures"] == ["If"]
+        exam_id = data["exam_id"]
+        assert data["job_id"]
+
+        # run_jobs_sync já rodou o job; a prova deve ter as questões extraídas.
+        exam = client.get(f"/exam/{exam_id}").json()
+        assert exam["filename"] == "prova.pdf"
+        assert len(exam["questions"]) == 1
+        assert exam["questions"][0]["number"] == "1"
+        assert exam["questions"][0]["required_structures"] == ["If"]
 
     def test_upload_formato_invalido_retorna_400(self, client):
         resp = client.post(
@@ -58,8 +64,8 @@ class TestExamUpload:
         )
         assert resp.status_code == 400
 
-    def test_upload_gemini_falha_retorna_503(self, client):
-        parse = patch("app.engine.document_parser.parse_document", return_value="texto")
+    def test_upload_gemini_falha_marca_job_com_erro(self, client, run_jobs_sync):
+        parse = patch("app.services.exam_service.parse_document", return_value="texto")
         gemini = patch(
             "app.engine.semantic_extractor.genai.Client",
             side_effect=RuntimeError("API indisponível"),
@@ -69,7 +75,15 @@ class TestExamUpload:
                 "/exam/upload",
                 files={"file": ("prova.pdf", FAKE_PDF_BYTES, "application/pdf")},
             )
-        assert resp.status_code == 503
+        # A falha do Gemini ocorre em segundo plano: a rota responde 200 e o erro
+        # fica registrado no status do job, sem questões na prova.
+        assert resp.status_code == 200
+        data = resp.json()
+        job = client.get(f"/jobs/{data['job_id']}").json()
+        assert job["status"] == "error"
+
+        exam = client.get(f"/exam/{data['exam_id']}").json()
+        assert exam["questions"] == []
 
 
 class TestGetExam:

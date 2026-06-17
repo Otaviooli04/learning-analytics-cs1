@@ -12,6 +12,23 @@ def create_turma(nome: str, codigo: str, db: Session, professor_id: int | None =
     return turma
 
 
+def update_turma(turma: Turma, nome: str, codigo: str, db: Session) -> Turma:
+    turma.nome = nome
+    turma.codigo = codigo
+    db.commit()
+    db.refresh(turma)
+    return turma
+
+
+def delete_turma(turma: Turma, db: Session) -> None:
+    """Exclusão em cascata total: remove cada prova (e tudo abaixo) e a turma."""
+    from app.services.exam_service import delete_exam
+    for exam in list(turma.exams):
+        delete_exam(exam, db)
+    db.delete(turma)
+    db.commit()
+
+
 def list_turmas(db: Session, professor_id: int | None = None) -> list:
     q = db.query(Turma)
     if professor_id is not None:

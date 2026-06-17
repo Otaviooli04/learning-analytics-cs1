@@ -79,6 +79,28 @@ def client(db, professor):
     fastapi_app.dependency_overrides.clear()
 
 
+@pytest.fixture()
+def run_jobs_sync(db, monkeypatch):
+    """Executa os jobs de segundo plano de forma síncrona na sessão de teste.
+
+    Em produção `run_in_background` dispara uma thread com sessão própria (banco
+    de produção). Nos testes substituímos por execução síncrona no banco de teste,
+    espelhando o tratamento de erro real (status 'error' em vez de propagar)."""
+    from app.services.job_service import update_job
+
+    def _sync(job_id, target):
+        update_job(db, job_id, status="running")
+        try:
+            target(db, job_id)
+        except Exception as e:  # noqa: BLE001 — reportado no status do job
+            update_job(db, job_id, status="error", message=str(e))
+
+    monkeypatch.setattr("app.services.exam_service.run_in_background", _sync)
+    monkeypatch.setattr(
+        "app.services.bulk_submission_service.run_in_background", _sync, raising=False)
+    return _sync
+
+
 # --- factories ---
 
 @pytest.fixture()
