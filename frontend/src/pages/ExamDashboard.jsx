@@ -97,7 +97,7 @@ export default function ExamDashboard() {
 
   useEffect(() => {
     loadExam().finally(() => setLoading(false))
-  }, [id])
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Acompanha a extração de questões (Gemini) que roda em segundo plano: enquanto
   // houver um job ativo desta prova, exibe o progresso; ao concluir, recarrega.
@@ -120,7 +120,7 @@ export default function ExamDashboard() {
     tick()
     const t = setInterval(tick, 2000)
     return () => { alive = false; clearInterval(t) }
-  }, [id])
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return <div className="flex justify-center py-16"><Spinner className="w-6 h-6 text-purple-600" /></div>
   if (error) return <p className="text-red-600 text-sm">{error}</p>

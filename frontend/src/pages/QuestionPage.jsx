@@ -88,7 +88,7 @@ export default function QuestionPage() {
         .then(({ data }) => setSubmissions(data.submissions))
         .finally(() => setSubLoading(false))
     }
-  }, [tab, id, num])
+  }, [tab, id, num]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Carrega os grupos já salvos (agrupados automaticamente no lote) ao abrir a aba.
   useEffect(() => {

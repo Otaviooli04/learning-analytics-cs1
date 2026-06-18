@@ -46,7 +46,7 @@ class TestPrecisionMismatch:
 class TestClassifyFloatPrecision:
     def test_classifica_precisao_decimal(self):
         diag = classify_error(_dyn("412.690", "412.69"), _STATIC)
-        assert diag["error_category"] == "Precisão de Saída — Casas Decimais"
+        assert diag["error_category"] == "Precisão de Saída: Casas Decimais"
         assert "3" in diag["pedagogical_diagnosis"]
         assert "%.3f" in diag["actionable_feedback"]
 

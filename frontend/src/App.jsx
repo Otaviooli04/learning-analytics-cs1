@@ -14,8 +14,6 @@ const ExamDashboard = lazy(() => import('./pages/ExamDashboard'))
 const TestCasesPage = lazy(() => import('./pages/TestCasesPage'))
 const SubmitPage = lazy(() => import('./pages/SubmitPage'))
 const ResultsPage = lazy(() => import('./pages/ResultsPage'))
-const ClusterPage = lazy(() => import('./pages/ClusterPage'))
-const InsightsPage = lazy(() => import('./pages/InsightsPage'))
 const TurmaListPage = lazy(() => import('./pages/TurmaListPage'))
 const TurmaDetailPage = lazy(() => import('./pages/TurmaDetailPage'))
 const ExamUploadPage = lazy(() => import('./pages/ExamUploadPage'))
@@ -61,8 +59,6 @@ export default function App() {
                 <Route path="exam/:id/questions/:num/testcases" element={<TestCasesPage />} />
                 <Route path="exam/:id/submit" element={<SubmitPage />} />
                 <Route path="exam/:id/results" element={<ResultsPage />} />
-                <Route path="exam/:id/questions/:num/cluster" element={<ClusterPage />} />
-                <Route path="exam/:id/questions/:num/insights" element={<InsightsPage />} />
                 <Route path="exam/:id/questions/:num/submissions" element={<SubmissionsPage />} />
                 <Route path="exam/:id/bulk-submit" element={<BulkSubmitPage />} />
                 <Route path="exam/:id/students" element={<StudentsPage />} />

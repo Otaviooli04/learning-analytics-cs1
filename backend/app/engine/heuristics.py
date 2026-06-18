@@ -127,7 +127,7 @@ def _check_floating_point(ctx: DiagnosisContext) -> dict | None:
     if ctx.dyn_success or "floating point exception" not in ctx.compile_error:
         return None
     return {
-        "error_category": "Erro Aritmético — Divisão por Zero",
+        "error_category": "Erro Aritmético: Divisão por Zero",
         "pedagogical_diagnosis": "O programa executou uma divisão por zero em tempo de execução.",
         "actionable_feedback": "Adicione uma verificação para garantir que o divisor seja diferente de zero antes da operação.",
     }
@@ -162,7 +162,7 @@ def _check_float_precision(ctx: DiagnosisContext) -> dict | None:
 
     Captura o erro clássico de CS1 (ex.: `%.2f` em vez de `%.3f`) ANTES do
     fallback genérico de "Saída Incorreta". Só dispara se TODOS os testes que
-    falharam forem diferenças puramente de precisão — se houver qualquer divergência
+    falharam forem diferenças puramente de precisão: se houver qualquer divergência
     de conteúdo/valor, deixa o checker de testes classificar como lógica incorreta.
     """
     if not ctx.dyn_success or not ctx.test_results:
@@ -244,7 +244,7 @@ def _classify_structure_violation(struct_check: dict) -> dict:
         parts.append(f"estruturas proibidas encontradas: {struct_check['found_forbidden']}")
     return {
         "error_category": "Violação de Estrutura",
-        "pedagogical_diagnosis": f"O código compilou, mas não respeita as restrições da questão — {'; '.join(parts)}.",
+        "pedagogical_diagnosis": f"O código compilou, mas não respeita as restrições da questão: {'; '.join(parts)}.",
         "actionable_feedback": "Revise o enunciado: verifique quais estruturas de controle são exigidas ou proibidas.",
     }
 
@@ -275,7 +275,7 @@ def _classify_function_violation(func_check: dict, found_functions: list) -> dic
         return {
             "error_category": "Assinatura Incorreta",
             "pedagogical_diagnosis": (
-                f"Função definida com assinatura diferente da exigida — "
+                f"Função definida com assinatura diferente da exigida: "
                 f"{'; '.join(func_check['signature_mismatches'])}."
             ),
             "actionable_feedback": (
@@ -318,7 +318,7 @@ def _classify_wrong_output(failed: list, total: int, risky_loops: list = None) -
         loop_vars = sorted({r["var"] for r in risky_loops})
         feedback += (
             f" Atenção: o laço com '<=' indexando vetor pela variável {loop_vars} pode acessar "
-            "uma posição além do fim do vetor (off-by-one) — verifique se deveria ser '<'."
+            "uma posição além do fim do vetor (off-by-one): verifique se deveria ser '<'."
         )
     return {
         "error_category": "Saída Incorreta",
@@ -366,7 +366,7 @@ def _precision_mismatch(expected: str, actual: str) -> tuple[int, int] | None:
 
 def _classify_float_precision(expected_decimals: int, found_decimals: int) -> dict:
     return {
-        "error_category": "Precisão de Saída — Casas Decimais",
+        "error_category": "Precisão de Saída: Casas Decimais",
         "pedagogical_diagnosis": (
             f"A saída tem os valores numéricos corretos, mas com número de casas "
             f"decimais diferente do esperado (esperado {expected_decimals}, "
@@ -389,7 +389,7 @@ def _classify_off_by_one(risky_loops: list, segfault: bool = False) -> dict:
     if segfault:
         base += " Esse acesso inválido provavelmente causou o Segmentation Fault."
     return {
-        "error_category": "Acesso Fora dos Limites — Off-by-One",
+        "error_category": "Acesso Fora dos Limites: Off-by-One",
         "pedagogical_diagnosis": base,
         "actionable_feedback": "Troque '<=' por '<' na condição do laço, ou aumente o tamanho do vetor declarado.",
     }
@@ -398,42 +398,42 @@ def _classify_off_by_one(risky_loops: list, segfault: bool = False) -> dict:
 def _classify_compilation_error(message: str) -> dict:
     if "expected ';'" in message or 'expected ";"' in message:
         return {
-            "error_category": "Sintaxe — Ponto e Vírgula Ausente",
+            "error_category": "Sintaxe: Ponto e Vírgula Ausente",
             "pedagogical_diagnosis": "Uma ou mais instruções não foram terminadas com ';'.",
             "actionable_feedback": "Localize a linha indicada pelo compilador e adicione o ponto e vírgula ao final da instrução.",
         }
 
     if "undeclared" in message or "was not declared" in message:
         return {
-            "error_category": "Sintaxe — Variável ou Função Não Declarada",
+            "error_category": "Sintaxe: Variável ou Função Não Declarada",
             "pedagogical_diagnosis": "O programa utiliza um identificador (variável ou função) que não foi declarado antes do uso.",
             "actionable_feedback": "Declare a variável antes de usá-la ou verifique se o nome está escrito corretamente.",
         }
 
     if "implicit declaration of function" in message:
         return {
-            "error_category": "Sintaxe — Cabeçalho Faltando",
+            "error_category": "Sintaxe: Cabeçalho Faltando",
             "pedagogical_diagnosis": "Uma função da biblioteca padrão foi usada sem o #include correspondente (ex: printf sem #include <stdio.h>).",
             "actionable_feedback": "Adicione o #include adequado ao início do arquivo.",
         }
 
     if "undefined reference" in message:
         return {
-            "error_category": "Linker — Função Indefinida",
+            "error_category": "Linker: Função Indefinida",
             "pedagogical_diagnosis": "O compilador encontrou uma chamada de função que não tem implementação vinculada.",
             "actionable_feedback": "Verifique se a função foi implementada ou se falta algum #include de biblioteca.",
         }
 
     if "incompatible type" in message or "invalid conversion" in message:
         return {
-            "error_category": "Semântica — Tipo Incompatível",
+            "error_category": "Semântica: Tipo Incompatível",
             "pedagogical_diagnosis": "Uma atribuição ou operação foi feita entre tipos de dados incompatíveis.",
             "actionable_feedback": "Verifique os tipos das variáveis envolvidas e aplique conversão explícita (cast) se necessário.",
         }
 
     if "control reaches end of non-void function" in message or "no return" in message:
         return {
-            "error_category": "Semântica — Retorno Ausente",
+            "error_category": "Semântica: Retorno Ausente",
             "pedagogical_diagnosis": "Uma função declarada com tipo de retorno não garante retornar um valor em todos os caminhos de execução.",
             "actionable_feedback": "Certifique-se de que a função possui um 'return' em todos os fluxos possíveis.",
         }
@@ -451,7 +451,7 @@ def _classify_timeout(structures: list) -> dict:
     if any(s in structures for s in loop_structures):
         loops_found = [s for s in structures if s in loop_structures]
         return {
-            "error_category": "Loop Infinito — Controle de Fluxo",
+            "error_category": "Loop Infinito: Controle de Fluxo",
             "pedagogical_diagnosis": f"O programa entrou em loop infinito. Laços detectados: {loops_found}.",
             "actionable_feedback": "Verifique se a variável de parada do laço está sendo modificada corretamente dentro do bloco.",
         }
@@ -466,21 +466,21 @@ def _classify_timeout(structures: list) -> dict:
 def _classify_warnings(warnings: str) -> dict | None:
     if "uninitialized" in warnings or "may be uninitialized" in warnings:
         return {
-            "error_category": "Aviso — Variável Não Inicializada",
+            "error_category": "Aviso: Variável Não Inicializada",
             "pedagogical_diagnosis": "O código compilou, mas uma variável é lida antes de receber um valor definido. Isso causa comportamento imprevisível.",
             "actionable_feedback": "Inicialize todas as variáveis no momento da declaração (ex: int x = 0;).",
         }
 
     if "unused variable" in warnings:
         return {
-            "error_category": "Aviso — Variável Declarada e Não Utilizada",
+            "error_category": "Aviso: Variável Declarada e Não Utilizada",
             "pedagogical_diagnosis": "O código declara uma variável que nunca é lida ou usada na lógica do programa.",
             "actionable_feedback": "Remova a variável ou verifique se esqueceu de usá-la na lógica do exercício.",
         }
 
     if "implicit declaration" in warnings:
         return {
-            "error_category": "Aviso — Declaração Implícita de Função",
+            "error_category": "Aviso: Declaração Implícita de Função",
             "pedagogical_diagnosis": "Uma função foi chamada sem declaração prévia visível. O compilador assumiu um protótipo genérico, o que pode causar erros silenciosos.",
             "actionable_feedback": "Adicione o #include correto ou declare o protótipo da função antes de chamá-la.",
         }
@@ -491,7 +491,7 @@ def _classify_warnings(warnings: str) -> dict | None:
 def _classify_success(structures: list) -> dict:
     if not structures:
         return {
-            "error_category": "Solução Sequencial — Sem Controle de Fluxo",
+            "error_category": "Solução Sequencial: Sem Controle de Fluxo",
             "pedagogical_diagnosis": "O código compilou e executou, mas não utilizou nenhuma estrutura de controle de fluxo (if, for, while, switch).",
             "actionable_feedback": "Verifique se o enunciado exige alguma estrutura de decisão ou repetição que ainda não foi implementada.",
         }
@@ -501,7 +501,7 @@ def _classify_success(structures: list) -> dict:
 
     if if_count >= 4 and loop_count == 0:
         return {
-            "error_category": "Estrutura Suspeita — Excesso de Condicionais",
+            "error_category": "Estrutura Suspeita: Excesso de Condicionais",
             "pedagogical_diagnosis": f"O código usa {if_count} blocos 'if' sem nenhum laço de repetição. Isso pode indicar uma tentativa de simular repetição com condicionais encadeados.",
             "actionable_feedback": "Considere substituir os condicionais encadeados por uma estrutura de repetição (for ou while).",
         }

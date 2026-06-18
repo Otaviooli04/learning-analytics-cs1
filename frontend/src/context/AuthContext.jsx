@@ -11,7 +11,9 @@ export function AuthProvider({ children }) {
   const [professor, setProfessor] = useState(() => {
     try { return JSON.parse(localStorage.getItem(PROFESSOR_KEY)) } catch { return null }
   })
-  const [loading, setLoading] = useState(false)
+  // Já começa "carregando" quando há token salvo: o efeito abaixo valida-o.
+  // Inicializar aqui evita um setState síncrono dentro do efeito.
+  const [loading, setLoading] = useState(() => !!localStorage.getItem(TOKEN_KEY))
 
   const login = useCallback((accessToken, professorData) => {
     localStorage.setItem(TOKEN_KEY, accessToken)
@@ -32,10 +34,9 @@ export function AuthProvider({ children }) {
     setProfessor(null)
   }, [])
 
-  // Valida token ao iniciar — descarta se expirado
+  // Valida token ao iniciar; descarta se expirado.
   useEffect(() => {
     if (!token) return
-    setLoading(true)
     api.get('/auth/me', { headers: { Authorization: `Bearer ${token}` } })
       .then(({ data }) => setProfessor(data))
       .catch(() => logout())
@@ -49,6 +50,7 @@ export function AuthProvider({ children }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth deve ser usado dentro de AuthProvider')

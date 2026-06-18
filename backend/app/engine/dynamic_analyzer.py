@@ -56,7 +56,12 @@ def compile_and_run(source_code: str, test_cases: list[dict]) -> dict:
             # -lm: linka a libm. Problemas de CS1 usam sqrt/pow/fabs (math.h);
             # sem isso o gcc dá "undefined reference" e o sistema reprova código
             # correto que o CodeRunner aceita (ele linka math por padrão).
-            "gcc", "-Wall", "student_code.c", "-o", "exe.out", "-lm",
+            # -ftrivial-auto-var-init=zero: zera variáveis locais não inicializadas,
+            # alinhando o comportamento ao do CodeRunner (que zera por acaso). Sem
+            # isso, código com UB produz lixo dependente do ambiente e reprova
+            # submissões que o avaliador de referência aceitou.
+            "gcc", "-Wall", "-ftrivial-auto-var-init=zero",
+            "student_code.c", "-o", "exe.out", "-lm",
         ]
         # Compilar código de CS1 leva <1s; um timeout aqui é quase sempre um
         # engasgo do Docker (container frio / daemon sob carga durante o lote),

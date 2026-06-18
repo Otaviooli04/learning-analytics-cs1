@@ -30,7 +30,7 @@ export default function TestCasesPage() {
     }).finally(() => setLoadingSaved(false))
   }
 
-  useEffect(() => { loadData() }, [id, num])
+  useEffect(() => { loadData() }, [id, num]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const addLocal = () => {
     if (!input.trim() || !expected.trim()) return

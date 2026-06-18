@@ -78,7 +78,7 @@ export default function BulkSubmitPage() {
       } catch { /* silencioso */ }
     }, 1500)
     return () => clearInterval(t)
-  }, [job?.id, job?.status])
+  }, [job?.id, job?.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const processing = uploading || (job && job.status !== 'done' && job.status !== 'error')
 
