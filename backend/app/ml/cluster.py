@@ -39,17 +39,28 @@ def _is_correct_category(cat: str) -> bool:
     return (cat or "").strip().lower().startswith("correto")
 
 
-def two_level_labels(features: np.ndarray, error_categories: list[str]) -> np.ndarray:
+def failure_signature(sub) -> Optional[tuple]:
+    """Assinatura comportamental da submissão: quais casos de teste passaram (1)
+    ou falharam (0), na ordem dos casos. None quando o código não chegou a
+    executar os casos (não compila ou questão sem casos de teste)."""
+    if sub.compile_error or not sub.test_results:
+        return None
+    return tuple(1 if tr.passed else 0 for tr in sub.test_results)
+
+
+def two_level_labels(submissions: List["Submission"], error_categories: list[str]) -> np.ndarray:
     """Agrupamento em dois níveis.
 
-    Nível 1: a categoria de erro das heurísticas, sinal confiável, separa as
-    submissões. Nível 2: dentro de cada categoria grande o bastante, um HDBSCAN
-    procura sub-padrões de código. Categorias pequenas e o grupo "Correto" ficam
-    inteiros, pois não têm sub-estrutura de interesse pedagógico.
+    Nível 1: a categoria de erro das heurísticas (sinal confiável, validado contra
+    o avaliador de referência) separa as submissões. Nível 2: dentro de cada
+    categoria grande o bastante que de fato executou, agrupa por ASSINATURA DE
+    FALHA — por quais casos de teste a submissão falhou. Submissões que falham os
+    mesmos casos tendem a ter o mesmo defeito, então a assinatura separa bugs
+    distintos de forma determinística e interpretável: o próprio sintoma rotula o
+    grupo, sem projeção geométrica opaca.
 
-    Cada grupo final é puro (uma só categoria), o que elimina a super-segmentação
-    entre categorias que estilhaçava a classe dominante em turmas pequenas. Toda
-    submissão recebe um grupo; não há ruído global."""
+    Categorias pequenas e o grupo "Correto" ficam inteiros. Assinaturas raras (um
+    só aluno) e as sem execução juntam-se num grupo residual da categoria."""
     n = len(error_categories)
     labels = np.full(n, -1, dtype=int)
     by_cat: dict[str, list[int]] = {}
@@ -58,53 +69,30 @@ def two_level_labels(features: np.ndarray, error_categories: list[str]) -> np.nd
 
     next_label = 0
     for cat, idx in by_cat.items():
-        sub = None
-        if len(idx) >= SUBCLUSTER_MIN and not _is_correct_category(cat):
-            sub = _subcluster(features[idx])
-
-        if sub is None:
+        if len(idx) < SUBCLUSTER_MIN or _is_correct_category(cat):
             for i in idx:
                 labels[i] = next_label
             next_label += 1
             continue
 
-        # Mapeia os sub-rótulos locais para rótulos globais; o ruído interno (-1)
-        # vira um único grupo residual da categoria, para não perder submissões.
-        local_to_global: dict[int, int] = {}
+        # Nível 2: agrupa a categoria pela assinatura de falha dos casos de teste.
+        by_sig: dict[Optional[tuple], list[int]] = {}
+        for i in idx:
+            by_sig.setdefault(failure_signature(submissions[i]), []).append(i)
+
         residual = None
-        for i, sl in zip(idx, sub):
-            if sl == -1:
+        for sig, members in sorted(by_sig.items(), key=lambda kv: -len(kv[1])):
+            if sig is not None and len(members) >= 2:
+                for i in members:
+                    labels[i] = next_label
+                next_label += 1
+            else:
                 if residual is None:
                     residual = next_label
                     next_label += 1
-                labels[i] = residual
-            else:
-                if sl not in local_to_global:
-                    local_to_global[sl] = next_label
-                    next_label += 1
-                labels[i] = local_to_global[sl]
+                for i in members:
+                    labels[i] = residual
     return labels
-
-
-def _subcluster(feats: np.ndarray) -> Optional[np.ndarray]:
-    """HDBSCAN dentro de uma categoria, sobre uma projeção UMAP local. Devolve
-    None quando não encontra ao menos dois sub-padrões: nesse caso a categoria
-    não vale a pena ser dividida. Best-effort: falha vira grupo único."""
-    m = len(feats)
-    try:
-        emb = UMAP(
-            n_components=min(5, m - 1),
-            n_neighbors=min(10, m - 1),
-            random_state=42,
-            min_dist=0.0,
-            init="random",
-        ).fit_transform(feats)
-        sub = HDBSCAN(min_cluster_size=max(3, round(m / 5))).fit_predict(emb)
-        if len(set(int(x) for x in sub) - {-1}) < 2:
-            return None
-        return sub
-    except Exception:  # noqa: BLE001 — sub-agrupamento é best-effort
-        return None
 
 
 class FeatureStrategy(str, Enum):
@@ -168,14 +156,13 @@ def cluster_question(
         init=umap_init,
     )
 
-    embedded_cluster = umap_cluster.fit_transform(features)
     embedded_viz = umap_viz.fit_transform(features)
 
-    # Agrupamento em dois níveis: categoria de erro (heurística) no nível 1,
-    # sub-padrões de código no nível 2. embedded_cluster serve só às métricas.
-    labels = two_level_labels(features, [s.error_category or "" for s in submissions])
+    # Nível 1: categoria de erro (heurística). Nível 2: assinatura de falha dos
+    # casos de teste. A projeção UMAP fica apenas como visualização no scatter.
+    labels = two_level_labels(submissions, [s.error_category or "" for s in submissions])
 
-    silhouette = _compute_silhouette(embedded_cluster, labels)
+    silhouette = None
 
     _persist_results(submissions, labels, embedded_viz, question_id, db)
 
