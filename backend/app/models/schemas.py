@@ -196,6 +196,7 @@ class ExamUpdate(BaseModel):
 class QuestionCreate(BaseModel):
     number: str
     statement: str
+    points: float = 1.0
     required_structures: List[str] = []
     forbidden_structures: List[str] = []
     requires_loop: bool = False
@@ -205,6 +206,7 @@ class QuestionCreate(BaseModel):
 class QuestionUpdate(BaseModel):
     number: Optional[str] = None
     statement: Optional[str] = None
+    points: Optional[float] = None
     required_structures: Optional[List[str]] = None
     forbidden_structures: Optional[List[str]] = None
     requires_loop: Optional[bool] = None
@@ -224,6 +226,7 @@ class QuestionResponse(BaseModel):
     id: int
     number: str
     statement: str
+    points: float = 1.0
     required_structures: List[str]
     forbidden_structures: List[str]
     requires_loop: bool
@@ -238,6 +241,7 @@ class ExamResponse(BaseModel):
     created_at: str
     turma_id: Optional[int] = None
     turma_nome: Optional[str] = None
+    total_points: float = 0.0
     questions: List[QuestionResponse]
 
 
@@ -351,7 +355,10 @@ class ClusterInfo(BaseModel):
     cluster_id: int
     size: int
     dominant_error: str
+    failing_label: Optional[str] = None
+    failing_count: Optional[int] = None
     representative_submission_id: Optional[int]
+    representative_matricula: Optional[str] = None
     representative_code: Optional[str]
 
 

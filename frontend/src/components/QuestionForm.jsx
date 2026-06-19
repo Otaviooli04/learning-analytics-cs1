@@ -5,6 +5,7 @@ const STRUCTURES = ['If', 'For', 'While', 'DoWhile', 'Switch']
 
 export default function QuestionForm({ initial, onSubmit, onCancel, saving, isEdit }) {
   const [number, setNumber] = useState(initial?.number ?? '')
+  const [points, setPoints] = useState(initial?.points ?? 1)
   const [statement, setStatement] = useState(initial?.statement ?? '')
   const [required, setRequired] = useState(initial?.required_structures ?? [])
   const [forbidden, setForbidden] = useState(initial?.forbidden_structures ?? [])
@@ -27,6 +28,7 @@ export default function QuestionForm({ initial, onSubmit, onCancel, saving, isEd
     if (!number.trim()) return
     onSubmit({
       number: number.trim(),
+      points: points === '' || points == null ? 1 : Number(points),
       statement: statement.trim(),
       required_structures: required,
       forbidden_structures: forbidden,
@@ -45,13 +47,23 @@ export default function QuestionForm({ initial, onSubmit, onCancel, saving, isEd
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">Número da questão</label>
-        <input
-          type="text" value={number} onChange={e => setNumber(e.target.value)}
-          disabled={isEdit}
-          className="w-full text-sm rounded-lg border border-gray-200 px-3 py-2 disabled:bg-gray-50 disabled:text-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-        />
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Número da questão</label>
+          <input
+            type="text" value={number} onChange={e => setNumber(e.target.value)}
+            disabled={isEdit}
+            className="w-full text-sm rounded-lg border border-gray-200 px-3 py-2 disabled:bg-gray-50 disabled:text-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Valor da questão</label>
+          <input
+            type="number" min="0" step="0.1" value={points}
+            onChange={e => setPoints(e.target.value)}
+            className="w-full text-sm rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+        </div>
       </div>
 
       <div>

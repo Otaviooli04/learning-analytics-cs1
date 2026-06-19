@@ -240,10 +240,15 @@ export default function ExamDashboard() {
         </div>
       )}
 
-      <div className="flex justify-end mb-3">
+      <div className="flex items-center justify-between mb-3">
+        {exam.questions.length > 0 && (
+          <p className="text-sm text-gray-500">
+            Valor total da prova: <span className="font-medium text-gray-700">{exam.total_points ?? 0}</span>
+          </p>
+        )}
         <button
           onClick={() => setQuestionForm({ mode: 'add', question: null })}
-          className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors ml-auto"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -266,6 +271,9 @@ export default function ExamDashboard() {
                   <div className="flex items-center gap-2 mb-1.5">
                     <span className="text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">
                       Q{q.number}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      Vale: <span className="font-medium text-gray-700">{q.points ?? 1}</span>
                     </span>
                     {q.required_structures.length > 0 && (
                       <span className="text-xs text-gray-400">

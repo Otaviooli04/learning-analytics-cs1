@@ -45,6 +45,39 @@ from app.services.exam_service import (
 router = APIRouter(prefix="/exam", tags=["exam"])
 
 
+def _failing_summary(submissions) -> dict:
+    """Por grupo (cluster_id): rótulo do sintoma e QUANTOS casos de teste o grupo
+    falha. Só rotula quando todos os membros compartilham a MESMA assinatura de
+    falha (grupo coeso); grupos de assinatura mista ficam sem rótulo/contagem.
+    O grupo "Correto" recebe contagem 0. Usado para descrever e ORDENAR os
+    cartões (mais casos falhos = dificuldade mais severa)."""
+    from app.ml.cluster import failure_signature
+    sigs_by_label: dict = {}
+    for s in submissions:
+        if s.cluster_id is not None:
+            sigs_by_label.setdefault(s.cluster_id, set()).add(failure_signature(s))
+
+    out: dict = {}
+    for label, sigs in sigs_by_label.items():
+        if len(sigs) != 1:
+            out[label] = (None, None)
+            continue
+        sig = next(iter(sigs))
+        if not sig:
+            out[label] = (None, None)
+            continue
+        failed = [i + 1 for i, ok in enumerate(sig) if not ok]
+        if not failed:
+            out[label] = (None, 0)
+        elif len(failed) == len(sig):
+            out[label] = ("falha todos os casos", len(failed))
+        elif len(failed) == 1:
+            out[label] = (f"falha o caso {failed[0]}", 1)
+        else:
+            out[label] = ("falha os casos " + ", ".join(map(str, failed)), len(failed))
+    return out
+
+
 # ── público: alunos precisam carregar a prova antes de submeter ──────────────
 @router.get("/{exam_id}", response_model=ExamResponse)
 def get_exam(exam_id: int, db: Session = Depends(get_db)):
@@ -283,13 +316,18 @@ def run_clustering(
     db.refresh(question)
     clusters_db = db.query(QuestionCluster).filter(QuestionCluster.question_id == question.id).all()
     clusters_map = {qc.cluster_label: qc for qc in clusters_db}
+    failing = _failing_summary(question.submissions)
     clusters_out = [
         ClusterInfo(
             cluster_id=c["cluster_id"],
             size=c["size"],
             dominant_error=c["dominant_error"],
+            failing_label=failing.get(c["cluster_id"], (None, None))[0],
+            failing_count=failing.get(c["cluster_id"], (None, None))[1],
             representative_submission_id=clusters_map[c["cluster_id"]].representative_submission_id
             if c["cluster_id"] in clusters_map else None,
+            representative_matricula=clusters_map[c["cluster_id"]].representative.matricula
+            if c["cluster_id"] in clusters_map and clusters_map[c["cluster_id"]].representative else None,
             representative_code=clusters_map[c["cluster_id"]].representative.code
             if c["cluster_id"] in clusters_map and clusters_map[c["cluster_id"]].representative else None,
         )
@@ -326,36 +364,15 @@ def get_groups(
         for s in question.submissions
         if s.cluster_id is not None and s.umap_x is not None and s.umap_y is not None
     ]
-    # Rótulo do sintoma por grupo: quais casos de teste o grupo falha. Só rotula
-    # quando todos os membros compartilham a mesma assinatura (grupo coeso); o
-    # grupo residual (assinaturas mistas) fica sem rótulo.
-    from app.ml.cluster import failure_signature
-    sigs_by_label: dict[int, set] = {}
-    for s in question.submissions:
-        if s.cluster_id is not None:
-            sigs_by_label.setdefault(s.cluster_id, set()).add(failure_signature(s))
-
-    def _failing_label(label):
-        sigs = sigs_by_label.get(label, set())
-        if len(sigs) != 1:
-            return None
-        sig = next(iter(sigs))
-        if not sig:
-            return None
-        failed = [i + 1 for i, ok in enumerate(sig) if not ok]
-        if not failed:
-            return None
-        if len(failed) == len(sig):
-            return "falha todos os casos"
-        if len(failed) == 1:
-            return f"falha o caso {failed[0]}"
-        return "falha os casos " + ", ".join(map(str, failed))
-
+    # Rótulo do sintoma por grupo: quais (e quantos) casos de teste o grupo falha.
+    failing = _failing_summary(question.submissions)
     clusters = [
         {"cluster_id": qc.cluster_label, "size": qc.size,
          "dominant_error": qc.dominant_error,
-         "failing_label": _failing_label(qc.cluster_label),
+         "failing_label": failing.get(qc.cluster_label, (None, None))[0],
+         "failing_count": failing.get(qc.cluster_label, (None, None))[1],
          "representative_submission_id": qc.representative_submission_id,
+         "representative_matricula": qc.representative.matricula if qc.representative else None,
          "representative_code": qc.representative.code if qc.representative else None}
         for qc in clusters_db
     ]
@@ -497,6 +514,7 @@ def _question_to_response(q: Question) -> QuestionResponse:
         id=q.id,
         number=q.number,
         statement=q.statement,
+        points=q.points if q.points is not None else 1.0,
         required_structures=q.required_structures or [],
         forbidden_structures=q.forbidden_structures or [],
         requires_loop=q.requires_loop,
@@ -521,5 +539,6 @@ def _exam_to_response(exam: Exam) -> ExamResponse:
         created_at=exam.created_at.isoformat() if exam.created_at else "",
         turma_id=exam.turma_id,
         turma_nome=exam.turma.nome if exam.turma else None,
+        total_points=sum((q.points if q.points is not None else 1.0) for q in exam.questions),
         questions=[_question_to_response(q) for q in sorted(exam.questions, key=_question_sort_key)],
     )

@@ -136,7 +136,7 @@ def create_question(exam_id: int, data: dict, db: Session) -> Question:
 
 def update_question(question: Question, data: dict, db: Session) -> Question:
     """Aplica apenas os campos enviados (data já vem com exclude_unset)."""
-    for field in ("number", "statement", "required_structures",
+    for field in ("number", "statement", "points", "required_structures",
                   "forbidden_structures", "requires_loop", "required_functions"):
         if field in data and data[field] is not None:
             setattr(question, field, data[field])

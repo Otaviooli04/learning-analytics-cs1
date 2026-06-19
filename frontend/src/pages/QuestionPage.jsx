@@ -12,7 +12,14 @@ import {
 import Spinner from '../components/Spinner'
 import Badge from '../components/Badge'
 import BarList from '../components/BarList'
+import ListControls from '../components/ListControls'
 import { shortError } from '../utils/errorLabels'
+
+const SUB_SORTS = [
+  { value: 'situacao', label: 'Situação' },
+  { value: 'matricula', label: 'Matrícula' },
+  { value: 'recentes', label: 'Mais recentes' },
+]
 
 const CLUSTER_COLORS = ['#7c3aed', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
 const ERROR_COLORS = ['#7c3aed', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316']
@@ -35,6 +42,8 @@ export default function QuestionPage() {
   const [submissions, setSubmissions] = useState(null)
   const [subLoading, setSubLoading] = useState(false)
   const [expanded, setExpanded] = useState({})
+  const [subSearch, setSubSearch] = useState('')
+  const [subSort, setSubSort] = useState('situacao')
   const [deleteSub, setDeleteSub] = useState(null)
   const [busySub, setBusySub] = useState(false)
   const [reevaluatingId, setReevaluatingId] = useState(null)
@@ -74,6 +83,7 @@ export default function QuestionPage() {
   const [groupsError, setGroupsError] = useState('')
   const [techOpen, setTechOpen] = useState(false)
   const [openCode, setOpenCode] = useState({})
+  const [autoInsightTried, setAutoInsightTried] = useState(false)
 
   useEffect(() => {
     getExam(id).then(({ data }) => {
@@ -138,6 +148,7 @@ export default function QuestionPage() {
       const { data } = await runClustering(id, num, GROUP_STRATEGY)
       setClusterResult(data)
       setInsights([])
+      setAutoInsightTried(false)
     } catch (e) {
       setGroupsError(e.response?.data?.detail || 'Erro ao analisar os grupos.')
     } finally {
@@ -163,19 +174,49 @@ export default function QuestionPage() {
   const isCorrect = (err) => /correto/i.test(err || '')
   const insightFor = (cid) => insights?.find(x => x.cluster_id === cid)?.insight || ''
 
+  // Situação da submissão (rótulo único p/ filtrar e ordenar a aba Respostas).
+  const subStatus = (s) =>
+    s.all_tests_passed ? 'Correto' : s.compile_error ? 'Erro de Compilação' : (s.error_category || 'Parcial')
+
+  // Lista de Respostas filtrada (matrícula/situação) e ordenada conforme o controle.
+  const visibleSubs = (submissions || [])
+    .filter(s => {
+      const q = subSearch.trim().toLowerCase()
+      if (!q) return true
+      return (s.matricula || '').toLowerCase().includes(q) || subStatus(s).toLowerCase().includes(q)
+    })
+    .sort((a, b) => {
+      if (subSort === 'matricula')
+        return (a.matricula || '').localeCompare(b.matricula || '', 'pt', { numeric: true })
+      if (subSort === 'recentes')
+        return new Date(b.submitted_at) - new Date(a.submitted_at)
+      // 'situacao': corretos por último; erros agrupados por categoria; depois matrícula.
+      const ca = isCorrect(subStatus(a)), cb = isCorrect(subStatus(b))
+      if (ca !== cb) return ca ? 1 : -1
+      const la = subStatus(a), lb = subStatus(b)
+      if (la !== lb) return la.localeCompare(lb, 'pt')
+      return (a.matricula || '').localeCompare(b.matricula || '', 'pt', { numeric: true })
+    })
+
   // Cor estável por grupo (ordem original dos clusters) p/ casar cartão e scatter.
   const clusterColor = (cid) => {
     const idx = clusterResult?.clusters.findIndex(c => c.cluster_id === cid) ?? -1
     return CLUSTER_COLORS[(idx < 0 ? 0 : idx) % CLUSTER_COLORS.length]
   }
 
-  // Cartões ranqueados: maior grupo primeiro, "Correto" por último; ruído (-1) fora.
+  // Cartões ranqueados por SEVERIDADE: mais casos de teste falhos primeiro
+  // (dificuldade mais grave no topo); "Correto" sempre por último; grupos sem
+  // assinatura coesa (failing_count nulo) ao fim das dificuldades; desempate por
+  // tamanho. Ruído (-1) fica fora.
   const rankedGroups = clusterResult
     ? [...clusterResult.clusters]
         .filter(c => c.cluster_id !== -1)
         .sort((a, b) => {
           if (isCorrect(a.dominant_error) !== isCorrect(b.dominant_error))
             return isCorrect(a.dominant_error) ? 1 : -1
+          const fa = a.failing_count ?? -1
+          const fb = b.failing_count ?? -1
+          if (fa !== fb) return fb - fa
           return b.size - a.size
         })
     : []
@@ -189,6 +230,19 @@ export default function QuestionPage() {
       .map(p => p.matricula) ?? []
 
   const noisePoints = clusterResult?.scatter.filter(p => p.cluster_id === -1) ?? []
+
+  // Preenche a descrição dos cartões automaticamente: se há grupos mas nenhum
+  // insight salvo, gera uma vez ao abrir a aba (depois vem tudo do cache). Falha
+  // (ex.: 429) cai no estado atual — cartão sem texto — e não re-dispara.
+  useEffect(() => {
+    if (
+      tab === 'cluster' && clusterResult && !groupsLoading &&
+      !hasInsights && !insightsRunning && !autoInsightTried && rankedGroups.length > 0
+    ) {
+      setAutoInsightTried(true)
+      genInsights()
+    }
+  }, [tab, clusterResult, groupsLoading, hasInsights, insightsRunning, autoInsightTried, rankedGroups.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div>
@@ -261,8 +315,22 @@ export default function QuestionPage() {
                 </div>
               )}
 
+              <ListControls
+                search={subSearch}
+                onSearch={setSubSearch}
+                sort={subSort}
+                onSort={setSubSort}
+                sortOptions={SUB_SORTS}
+                placeholder="Buscar por matrícula ou situação…"
+              />
+
+              {visibleSubs.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-8">Nenhuma resposta corresponde à busca.</p>
+              )}
+
+              {visibleSubs.length > 0 && (
               <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-50">
-                {submissions.map(s => (
+                {visibleSubs.map(s => (
                   <div key={s.id} className="p-4">
                     <div
                       className="flex items-center gap-2 cursor-pointer"
@@ -321,6 +389,7 @@ export default function QuestionPage() {
                   </div>
                 ))}
               </div>
+              )}
             </div>
           )}
         </div>
@@ -409,6 +478,13 @@ export default function QuestionPage() {
                         </div>
                       )}
 
+                      {!insight && insightsRunning && (
+                        <div className="flex items-center gap-2 mb-3 text-xs text-gray-400">
+                          <Spinner className="w-3 h-3" />
+                          Gerando descrição…
+                        </div>
+                      )}
+
                       {alunos.length > 0 && (
                         <div className="flex flex-wrap gap-1">
                           {alunos.map(m => (
@@ -425,12 +501,25 @@ export default function QuestionPage() {
 
                       {c.representative_code && (
                         <div className="mt-3">
-                          <button
-                            onClick={() => setOpenCode(o => ({ ...o, [c.cluster_id]: !o[c.cluster_id] }))}
-                            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                          >
-                            {openCode[c.cluster_id] ? '− Ocultar' : '+ Ver'} código representativo
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setOpenCode(o => ({ ...o, [c.cluster_id]: !o[c.cluster_id] }))}
+                              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                              {openCode[c.cluster_id] ? '− Ocultar' : '+ Ver'} código representativo
+                            </button>
+                            {c.representative_matricula && (
+                              <span className="text-xs text-gray-400">
+                                · de{' '}
+                                <Link
+                                  to={`/exam/${id}/students/${c.representative_matricula}`}
+                                  className="font-mono text-gray-500 hover:text-purple-700 transition-colors"
+                                >
+                                  {c.representative_matricula}
+                                </Link>
+                              </span>
+                            )}
+                          </div>
                           {openCode[c.cluster_id] && (
                             <pre className="mt-2 text-xs font-mono bg-gray-50 rounded-lg p-3 overflow-x-auto text-gray-600 max-h-48 whitespace-pre-wrap">
                               {c.representative_code}

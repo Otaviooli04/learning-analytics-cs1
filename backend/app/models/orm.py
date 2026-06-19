@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON, Float
 from sqlalchemy.orm import relationship
 from app.models.database import Base
 
@@ -49,6 +49,7 @@ class Question(Base):
     exam_id = Column(Integer, ForeignKey("exams.id"))
     number = Column(String)
     statement = Column(Text)
+    points = Column(Float, default=1.0, server_default="1.0")  # valor da questão na nota
     required_structures = Column(JSON, default=list)
     forbidden_structures = Column(JSON, default=list)
     requires_loop = Column(Boolean, default=False)
