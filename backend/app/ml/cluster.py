@@ -30,6 +30,83 @@ def _adaptive_min_cluster_size(n: int) -> int:
     return max(2, min(8, round(n / 12)))
 
 
+# Tamanho mínimo de uma categoria de erro para procurar sub-padrões dentro dela.
+# Abaixo disso a categoria vira um grupo único: não há massa para dois sub-grupos.
+SUBCLUSTER_MIN = 6
+
+
+def _is_correct_category(cat: str) -> bool:
+    return (cat or "").strip().lower().startswith("correto")
+
+
+def two_level_labels(features: np.ndarray, error_categories: list[str]) -> np.ndarray:
+    """Agrupamento em dois níveis.
+
+    Nível 1: a categoria de erro das heurísticas, sinal confiável, separa as
+    submissões. Nível 2: dentro de cada categoria grande o bastante, um HDBSCAN
+    procura sub-padrões de código. Categorias pequenas e o grupo "Correto" ficam
+    inteiros, pois não têm sub-estrutura de interesse pedagógico.
+
+    Cada grupo final é puro (uma só categoria), o que elimina a super-segmentação
+    entre categorias que estilhaçava a classe dominante em turmas pequenas. Toda
+    submissão recebe um grupo; não há ruído global."""
+    n = len(error_categories)
+    labels = np.full(n, -1, dtype=int)
+    by_cat: dict[str, list[int]] = {}
+    for i, cat in enumerate(error_categories):
+        by_cat.setdefault(cat or "unknown", []).append(i)
+
+    next_label = 0
+    for cat, idx in by_cat.items():
+        sub = None
+        if len(idx) >= SUBCLUSTER_MIN and not _is_correct_category(cat):
+            sub = _subcluster(features[idx])
+
+        if sub is None:
+            for i in idx:
+                labels[i] = next_label
+            next_label += 1
+            continue
+
+        # Mapeia os sub-rótulos locais para rótulos globais; o ruído interno (-1)
+        # vira um único grupo residual da categoria, para não perder submissões.
+        local_to_global: dict[int, int] = {}
+        residual = None
+        for i, sl in zip(idx, sub):
+            if sl == -1:
+                if residual is None:
+                    residual = next_label
+                    next_label += 1
+                labels[i] = residual
+            else:
+                if sl not in local_to_global:
+                    local_to_global[sl] = next_label
+                    next_label += 1
+                labels[i] = local_to_global[sl]
+    return labels
+
+
+def _subcluster(feats: np.ndarray) -> Optional[np.ndarray]:
+    """HDBSCAN dentro de uma categoria, sobre uma projeção UMAP local. Devolve
+    None quando não encontra ao menos dois sub-padrões: nesse caso a categoria
+    não vale a pena ser dividida. Best-effort: falha vira grupo único."""
+    m = len(feats)
+    try:
+        emb = UMAP(
+            n_components=min(5, m - 1),
+            n_neighbors=min(10, m - 1),
+            random_state=42,
+            min_dist=0.0,
+            init="random",
+        ).fit_transform(feats)
+        sub = HDBSCAN(min_cluster_size=max(3, round(m / 5))).fit_predict(emb)
+        if len(set(int(x) for x in sub) - {-1}) < 2:
+            return None
+        return sub
+    except Exception:  # noqa: BLE001 — sub-agrupamento é best-effort
+        return None
+
+
 class FeatureStrategy(str, Enum):
     TFIDF = "tfidf"
     TFIDF_NGRAM = "tfidf_ngram"
@@ -94,7 +171,9 @@ def cluster_question(
     embedded_cluster = umap_cluster.fit_transform(features)
     embedded_viz = umap_viz.fit_transform(features)
 
-    labels = HDBSCAN(min_cluster_size=_adaptive_min_cluster_size(n)).fit_predict(embedded_cluster)
+    # Agrupamento em dois níveis: categoria de erro (heurística) no nível 1,
+    # sub-padrões de código no nível 2. embedded_cluster serve só às métricas.
+    labels = two_level_labels(features, [s.error_category or "" for s in submissions])
 
     silhouette = _compute_silhouette(embedded_cluster, labels)
 
