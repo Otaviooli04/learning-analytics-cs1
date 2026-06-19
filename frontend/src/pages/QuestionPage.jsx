@@ -398,6 +398,7 @@ export default function QuestionPage() {
                       <div className="flex items-center gap-2 mb-3">
                         <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: clusterColor(c.cluster_id) }} />
                         <Badge color={isCorrect(c.dominant_error) ? 'green' : 'red'}>{c.dominant_error}</Badge>
+                        {c.failing_label && <span className="text-xs text-gray-500">· {c.failing_label}</span>}
                         <span className="ml-auto text-xs text-gray-400">{c.size} aluno{c.size !== 1 ? 's' : ''} · {pct}%</span>
                       </div>
 

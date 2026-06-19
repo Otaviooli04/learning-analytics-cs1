@@ -326,9 +326,35 @@ def get_groups(
         for s in question.submissions
         if s.cluster_id is not None and s.umap_x is not None and s.umap_y is not None
     ]
+    # Rótulo do sintoma por grupo: quais casos de teste o grupo falha. Só rotula
+    # quando todos os membros compartilham a mesma assinatura (grupo coeso); o
+    # grupo residual (assinaturas mistas) fica sem rótulo.
+    from app.ml.cluster import failure_signature
+    sigs_by_label: dict[int, set] = {}
+    for s in question.submissions:
+        if s.cluster_id is not None:
+            sigs_by_label.setdefault(s.cluster_id, set()).add(failure_signature(s))
+
+    def _failing_label(label):
+        sigs = sigs_by_label.get(label, set())
+        if len(sigs) != 1:
+            return None
+        sig = next(iter(sigs))
+        if not sig:
+            return None
+        failed = [i + 1 for i, ok in enumerate(sig) if not ok]
+        if not failed:
+            return None
+        if len(failed) == len(sig):
+            return "falha todos os casos"
+        if len(failed) == 1:
+            return f"falha o caso {failed[0]}"
+        return "falha os casos " + ", ".join(map(str, failed))
+
     clusters = [
         {"cluster_id": qc.cluster_label, "size": qc.size,
          "dominant_error": qc.dominant_error,
+         "failing_label": _failing_label(qc.cluster_label),
          "representative_submission_id": qc.representative_submission_id,
          "representative_code": qc.representative.code if qc.representative else None}
         for qc in clusters_db
