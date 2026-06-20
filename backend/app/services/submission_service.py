@@ -55,3 +55,47 @@ def evaluate_submission(exam_id: int, question_number: str, code: str, db: Sessi
 
     db.commit()
     return {"question_number": question_number, **result}
+
+
+def delete_submission(submission: Submission, db: Session) -> None:
+    db.delete(submission)  # test_results saem por cascade (all, delete-orphan)
+    db.commit()
+
+
+def reevaluate_submission(submission: Submission, db: Session) -> dict:
+    """Reavalia o código já submetido contra os test cases/requisitos ATUAIS da
+    questão (útil após editar casos ou requisitos). Atualiza a submissão no lugar."""
+    question = submission.question
+    test_cases = [
+        {"input": tc.input, "expected_output": tc.expected_output}
+        for tc in question.test_cases
+    ]
+    result = evaluate_code(
+        submission.code,
+        test_cases,
+        question.required_structures or [],
+        question.forbidden_structures or [],
+        question.required_functions or [],
+    )
+
+    submission.compile_error = result["compile_error"]
+    submission.warnings = result["warnings"]
+    submission.all_tests_passed = result["all_tests_passed"]
+    submission.error_category = result["diagnosis"]["error_category"]
+    submission.pedagogical_diagnosis = result["diagnosis"]["pedagogical_diagnosis"]
+    submission.actionable_feedback = result["diagnosis"]["actionable_feedback"]
+    submission.ast_structures = result.get("ast_structures", [])
+    submission.ast_functions = result.get("ast_functions", [])
+
+    submission.test_results = []  # delete-orphan remove os antigos
+    db.flush()
+    for tr in result["test_results"]:
+        db.add(SubmissionTestResult(
+            submission_id=submission.id,
+            input=tr["input"],
+            expected_output=tr["expected_output"],
+            actual_output=tr["actual_output"],
+            passed=tr["passed"],
+        ))
+    db.commit()
+    return {"question_number": question.number, **result}

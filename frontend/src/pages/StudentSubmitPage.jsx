@@ -4,6 +4,7 @@ import { getExam, submitCode } from '../api/exam'
 import Spinner from '../components/Spinner'
 import Badge from '../components/Badge'
 import FunctionCheckCard from '../components/FunctionCheckCard'
+import Logo from '../components/Logo'
 
 function formatRequiredFunction(fn) {
   const tags = []
@@ -89,11 +90,7 @@ export default function StudentSubmitPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-2xl mx-auto px-6 h-14 flex items-center gap-3">
-          <div className="w-7 h-7 bg-purple-600 rounded-lg flex items-center justify-center">
-            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-          </div>
+          <Logo className="w-7 h-7" />
           <div>
             <span className="text-sm font-semibold text-gray-900">{exam.filename}</span>
             {exam.turma_nome && (
@@ -189,7 +186,7 @@ export default function StudentSubmitPage() {
                 <Badge color={diagColor(result.diagnosis?.error_category)}>
                   {result.diagnosis?.error_category}
                 </Badge>
-                <span className="text-xs text-gray-400">Questão {selectedQuestion} — {matricula}</span>
+                <span className="text-xs text-gray-400">Questão {selectedQuestion} ({matricula})</span>
               </div>
               <p className="text-sm text-gray-700">{result.diagnosis?.pedagogical_diagnosis}</p>
               {result.diagnosis?.actionable_feedback && (
@@ -220,7 +217,7 @@ export default function StudentSubmitPage() {
             {result.test_results?.length > 0 && (
               <div className="bg-white rounded-xl border border-gray-200 p-5">
                 <h3 className="text-sm font-medium text-gray-700 mb-3">
-                  Testes — {result.test_results.filter(t => t.passed).length}/{result.test_results.length} passaram
+                  Testes: {result.test_results.filter(t => t.passed).length}/{result.test_results.length} passaram
                 </h3>
                 <div className="space-y-2">
                   {result.test_results.map((tr, i) => (

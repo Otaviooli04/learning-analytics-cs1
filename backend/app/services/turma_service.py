@@ -1,4 +1,7 @@
-from collections import Counter
+from collections import Counter, defaultdict
+
+# UNIFEI: aprovado é quem obtém pelo menos 60% da prova (por NOTA).
+APPROVAL_THRESHOLD = 0.60
 from datetime import datetime
 from sqlalchemy.orm import Session
 from app.models.orm import Exam, Question, Submission, Turma
@@ -10,6 +13,23 @@ def create_turma(nome: str, codigo: str, db: Session, professor_id: int | None =
     db.commit()
     db.refresh(turma)
     return turma
+
+
+def update_turma(turma: Turma, nome: str, codigo: str, db: Session) -> Turma:
+    turma.nome = nome
+    turma.codigo = codigo
+    db.commit()
+    db.refresh(turma)
+    return turma
+
+
+def delete_turma(turma: Turma, db: Session) -> None:
+    """Exclusão em cascata total: remove cada prova (e tudo abaixo) e a turma."""
+    from app.services.exam_service import delete_exam
+    for exam in list(turma.exams):
+        delete_exam(exam, db)
+    db.delete(turma)
+    db.commit()
 
 
 def list_turmas(db: Session, professor_id: int | None = None) -> list:
@@ -69,13 +89,40 @@ def get_turma_analytics(turma_id: int, db: Session, professor_id: int | None = N
 
     for exam in sorted(turma.exams, key=lambda e: e.created_at):
         exam_subs: list[Submission] = []
+        # Nota da prova por aluno = soma ponderada das questões pelo VALOR de cada
+        # uma (Question.points); dentro da questão, a fração de casos de teste que
+        # passam (crédito parcial), tomando a MELHOR submissão do aluno por questão.
+        # Questão não respondida conta 0. Aprovado = nota >= 60% do total da prova.
+        total_points = 0.0
+        q_points: dict[int, float] = {}
+        best_q_score: dict[tuple[str, int], float] = defaultdict(float)
+        alunos_exam: set[str] = set()
         for question in exam.questions:
+            pts = question.points if question.points is not None else 1.0
+            q_points[question.id] = pts
+            total_points += pts
             exam_subs.extend(question.submissions)
+            for s in question.submissions:
+                if not s.matricula:
+                    continue
+                alunos_exam.add(s.matricula)
+                if s.compile_error or not s.test_results:
+                    frac = 0.0
+                else:
+                    frac = sum(1 for tr in s.test_results if tr.passed) / len(s.test_results)
+                key = (s.matricula, question.id)
+                if frac > best_q_score[key]:
+                    best_q_score[key] = frac
 
         all_submissions.extend(exam_subs)
 
-        alunos_exam = {s.matricula for s in exam_subs if s.matricula}
-        passed_alunos = {s.matricula for s in exam_subs if s.matricula and s.all_tests_passed}
+        grade = defaultdict(float)
+        for (matricula, qid), frac in best_q_score.items():
+            grade[matricula] += frac * q_points[qid]
+        passed_alunos = {
+            m for m in alunos_exam
+            if total_points > 0 and grade[m] / total_points >= APPROVAL_THRESHOLD
+        }
 
         total_alunos_exam = len(alunos_exam)
         pass_rate = (len(passed_alunos) / total_alunos_exam * 100) if total_alunos_exam > 0 else None
@@ -96,7 +143,8 @@ def get_turma_analytics(turma_id: int, db: Session, professor_id: int | None = N
     aproveitamento_medio = round(sum(pass_rates) / len(pass_rates), 1) if pass_rates else None
 
     error_counter = Counter(
-        s.error_category for s in all_submissions if s.error_category
+        s.error_category for s in all_submissions
+        if s.error_category and s.error_category != "Correto"
     )
     top_erros = [
         {"error_category": cat, "count": cnt}

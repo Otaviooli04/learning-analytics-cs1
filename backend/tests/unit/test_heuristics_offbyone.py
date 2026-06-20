@@ -51,7 +51,7 @@ class TestHeuristicaOffByOne:
         dyn = {"success": False, "compile_error": "Segmentation fault (core dumped)"}
         static = {"structures": ["For"], "risky_loops": [{"var": "i", "op": "<="}]}
         diag = classify_error(dyn, static)
-        assert diag["error_category"] == "Acesso Fora dos Limites — Off-by-One"
+        assert diag["error_category"] == "Acesso Fora dos Limites: Off-by-One"
 
     def test_segfault_sem_risco_mantem_categoria_generica(self):
         dyn = {"success": False, "compile_error": "Segmentation fault (core dumped)"}

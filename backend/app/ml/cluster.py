@@ -18,6 +18,83 @@ from app.models.orm import QuestionCluster, Submission
 MIN_SUBMISSIONS = 3
 
 
+def _adaptive_min_cluster_size(n: int) -> int:
+    """min_cluster_size proporcional ao tamanho da turma.
+
+    Fixá-lo em 2 super-segmenta turmas maiores: no experimento de sensibilidade
+    (exp2) mcs≈5 é ótimo para n≈56, e na escalabilidade (exp3) n≈98 com mcs=2
+    estoura para 17–26 clusters. Cresce ~n/12 (≈5 em n=56, ≈8 em n=98), limitado
+    a [2, 8] para não colapsar turmas grandes nem exigir grupos grandes demais em
+    turmas pequenas. Heurística-base validada nos experimentos; afinável.
+    """
+    return max(2, min(8, round(n / 12)))
+
+
+# Tamanho mínimo de uma categoria de erro para procurar sub-padrões dentro dela.
+# Abaixo disso a categoria vira um grupo único: não há massa para dois sub-grupos.
+SUBCLUSTER_MIN = 6
+
+
+def _is_correct_category(cat: str) -> bool:
+    return (cat or "").strip().lower().startswith("correto")
+
+
+def failure_signature(sub) -> Optional[tuple]:
+    """Assinatura comportamental da submissão: quais casos de teste passaram (1)
+    ou falharam (0), na ordem dos casos. None quando o código não chegou a
+    executar os casos (não compila ou questão sem casos de teste)."""
+    if sub.compile_error or not sub.test_results:
+        return None
+    return tuple(1 if tr.passed else 0 for tr in sub.test_results)
+
+
+def two_level_labels(submissions: List["Submission"], error_categories: list[str]) -> np.ndarray:
+    """Agrupamento em dois níveis.
+
+    Nível 1: a categoria de erro das heurísticas (sinal confiável, validado contra
+    o avaliador de referência) separa as submissões. Nível 2: dentro de cada
+    categoria grande o bastante que de fato executou, agrupa por ASSINATURA DE
+    FALHA — por quais casos de teste a submissão falhou. Submissões que falham os
+    mesmos casos tendem a ter o mesmo defeito, então a assinatura separa bugs
+    distintos de forma determinística e interpretável: o próprio sintoma rotula o
+    grupo, sem projeção geométrica opaca.
+
+    Categorias pequenas e o grupo "Correto" ficam inteiros. Assinaturas raras (um
+    só aluno) e as sem execução juntam-se num grupo residual da categoria."""
+    n = len(error_categories)
+    labels = np.full(n, -1, dtype=int)
+    by_cat: dict[str, list[int]] = {}
+    for i, cat in enumerate(error_categories):
+        by_cat.setdefault(cat or "unknown", []).append(i)
+
+    next_label = 0
+    for cat, idx in by_cat.items():
+        if len(idx) < SUBCLUSTER_MIN or _is_correct_category(cat):
+            for i in idx:
+                labels[i] = next_label
+            next_label += 1
+            continue
+
+        # Nível 2: agrupa a categoria pela assinatura de falha dos casos de teste.
+        by_sig: dict[Optional[tuple], list[int]] = {}
+        for i in idx:
+            by_sig.setdefault(failure_signature(submissions[i]), []).append(i)
+
+        residual = None
+        for sig, members in sorted(by_sig.items(), key=lambda kv: -len(kv[1])):
+            if sig is not None and len(members) >= 2:
+                for i in members:
+                    labels[i] = next_label
+                next_label += 1
+            else:
+                if residual is None:
+                    residual = next_label
+                    next_label += 1
+                for i in members:
+                    labels[i] = residual
+    return labels
+
+
 class FeatureStrategy(str, Enum):
     TFIDF = "tfidf"
     TFIDF_NGRAM = "tfidf_ngram"
@@ -79,12 +156,13 @@ def cluster_question(
         init=umap_init,
     )
 
-    embedded_cluster = umap_cluster.fit_transform(features)
     embedded_viz = umap_viz.fit_transform(features)
 
-    labels = HDBSCAN(min_cluster_size=2).fit_predict(embedded_cluster)
+    # Nível 1: categoria de erro (heurística). Nível 2: assinatura de falha dos
+    # casos de teste. A projeção UMAP fica apenas como visualização no scatter.
+    labels = two_level_labels(submissions, [s.error_category or "" for s in submissions])
 
-    silhouette = _compute_silhouette(embedded_cluster, labels)
+    silhouette = None
 
     _persist_results(submissions, labels, embedded_viz, question_id, db)
 

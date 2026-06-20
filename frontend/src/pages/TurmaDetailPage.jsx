@@ -1,13 +1,20 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList,
-} from 'recharts'
-import { getTurma, getTurmaAnalytics } from '../api/exam'
+import { getTurma, getTurmaAnalytics, deleteExam } from '../api/exam'
 import Spinner from '../components/Spinner'
+import ConfirmDialog from '../components/ConfirmDialog'
+import ListControls from '../components/ListControls'
+import BarList from '../components/BarList'
+import { shortError } from '../utils/errorLabels'
 
-const PASS_COLOR = '#7c3aed'
+const SORT_OPTIONS = [
+  { value: 'recent', label: 'Mais recentes' },
+  { value: 'oldest', label: 'Mais antigas' },
+  { value: 'name', label: 'Nome (A–Z)' },
+]
+
 const ERR_COLOR = '#e11d48'
+const rateColor = (r) => (r >= 70 ? '#10b981' : r >= 40 ? '#f59e0b' : '#ef4444')
 
 function KpiCard({ label, value, sub }) {
   return (
@@ -32,28 +39,6 @@ function PassRateBar({ rate }) {
   )
 }
 
-function DiffBadge({ rate }) {
-  if (rate == null) return null
-  const [label, cls] =
-    rate >= 70 ? ['Fácil', 'text-emerald-700 bg-emerald-50 border-emerald-100']
-    : rate >= 40 ? ['Médio', 'text-amber-700 bg-amber-50 border-amber-100']
-    : ['Difícil', 'text-red-700 bg-red-50 border-red-100']
-  return (
-    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${cls}`}>
-      {label}
-    </span>
-  )
-}
-
-const SHORT_LABELS = {
-  'Erro de compilação': 'Compilação',
-  'Erro em tempo de execução': 'Execução',
-  'Falha nos testes': 'Testes',
-  'Uso incorreto de estruturas': 'Estruturas',
-  'Aprovado': 'Aprovado',
-  'Sem diagnóstico': 'Sem diag.',
-}
-
 export default function TurmaDetailPage() {
   const { turmaId } = useParams()
   const navigate = useNavigate()
@@ -61,6 +46,23 @@ export default function TurmaDetailPage() {
   const [analytics, setAnalytics] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [deleteExamTarget, setDeleteExamTarget] = useState(null)
+  const [deletingExam, setDeletingExam] = useState(false)
+  const [search, setSearch] = useState('')
+  const [sort, setSort] = useState('recent')
+
+  const confirmDeleteExam = async () => {
+    setDeletingExam(true)
+    try {
+      await deleteExam(deleteExamTarget.id)
+      setTurma(t => ({ ...t, exams: t.exams.filter(e => e.id !== deleteExamTarget.id) }))
+      setDeleteExamTarget(null)
+    } catch {
+      setError('Erro ao excluir a prova.')
+    } finally {
+      setDeletingExam(false)
+    }
+  }
 
   useEffect(() => {
     Promise.all([getTurma(turmaId), getTurmaAnalytics(turmaId)])
@@ -82,13 +84,28 @@ export default function TurmaDetailPage() {
 
   const examAnalyticsMap = Object.fromEntries((analytics?.provas ?? []).map(p => [p.id, p]))
 
+  const displayedExams = (turma.exams ?? [])
+    .filter(exam => {
+      const q = search.trim().toLowerCase()
+      return q ? exam.filename.toLowerCase().includes(q) : true
+    })
+    .sort((a, b) => {
+      if (sort === 'name') return a.filename.localeCompare(b.filename, 'pt-BR')
+      const da = new Date(a.created_at).getTime()
+      const db = new Date(b.created_at).getTime()
+      return sort === 'oldest' ? da - db : db - da
+    })
+
   const evolucaoData = (analytics?.provas ?? []).map(p => ({
     name: p.filename.replace(/\.[^.]+$/, ''),
     taxa: p.pass_rate ?? 0,
   }))
 
+  const truncar = (s, n = 14) => (s.length > n ? `${s.slice(0, n)}…` : s)
+
   const errosData = (analytics?.top_erros ?? []).map(e => ({
-    name: SHORT_LABELS[e.error_category] ?? e.error_category,
+    name: shortError(e.error_category),
+    full: e.error_category,
     count: e.count,
   }))
 
@@ -150,16 +167,13 @@ export default function TurmaDetailPage() {
           {evolucaoData.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-sm font-semibold text-gray-700 mb-4">Taxa de aprovação por prova</h2>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={evolucaoData} barSize={28}>
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={v => [`${v}%`, 'Aprovação']} />
-                  <Bar dataKey="taxa" radius={[4, 4, 0, 0]} fill={PASS_COLOR}>
-                    <LabelList dataKey="taxa" position="top" formatter={v => `${v}%`} style={{ fontSize: 11, fill: '#6b7280' }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <BarList
+                max={100}
+                items={evolucaoData.map(d => ({
+                  label: truncar(d.name), title: d.name,
+                  value: d.taxa, display: `${d.taxa}%`, color: rateColor(d.taxa),
+                }))}
+              />
             </div>
           )}
 
@@ -167,19 +181,10 @@ export default function TurmaDetailPage() {
           {errosData.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-sm font-semibold text-gray-700 mb-4">Erros mais frequentes</h2>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={errosData} layout="vertical" barSize={18}>
-                  <XAxis type="number" tick={{ fontSize: 11 }} />
-                  <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={v => [v, 'Submissões']} />
-                  <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                    {errosData.map((_, i) => (
-                      <Cell key={i} fill={i === 0 ? ERR_COLOR : '#f43f5e'} opacity={1 - i * 0.12} />
-                    ))}
-                    <LabelList dataKey="count" position="right" style={{ fontSize: 11, fill: '#6b7280' }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <BarList
+                color={ERR_COLOR}
+                items={errosData.map(e => ({ label: e.name, title: e.full, value: e.count }))}
+              />
             </div>
           )}
         </div>
@@ -197,32 +202,64 @@ export default function TurmaDetailPage() {
             <p className="text-xs mt-1">Clique em "Upload de prova" para adicionar.</p>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {turma.exams.map(exam => {
+          <>
+            <ListControls
+              search={search} onSearch={setSearch}
+              sort={sort} onSort={setSort}
+              sortOptions={SORT_OPTIONS}
+              placeholder="Buscar prova pelo nome…"
+            />
+            {displayedExams.length === 0 ? (
+              <p className="text-center py-12 text-sm text-gray-400">Nenhuma prova encontrada para o filtro.</p>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {displayedExams.map(exam => {
               const ea = examAnalyticsMap[exam.id]
               return (
-                <button
+                <div
                   key={exam.id}
-                  onClick={() => navigate(`/exam/${exam.id}`)}
-                  className="bg-white rounded-xl border border-gray-200 p-5 text-left hover:border-purple-300 hover:shadow-sm transition-all"
+                  className="bg-white rounded-xl border border-gray-200 p-5 hover:border-purple-300 hover:shadow-sm transition-all flex flex-col"
                 >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <h2 className="text-sm font-semibold text-gray-900 leading-tight truncate flex-1">{exam.filename}</h2>
-                    {ea && <DiffBadge rate={ea.pass_rate} />}
+                  <div onClick={() => navigate(`/exam/${exam.id}`)} className="cursor-pointer flex-1">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <h2 className="text-sm font-semibold text-gray-900 leading-tight truncate flex-1">{exam.filename}</h2>
+                    </div>
+                    <div className="flex gap-4 text-xs text-gray-500 mb-1">
+                      <span>{exam.question_count} {exam.question_count === 1 ? 'questão' : 'questões'}</span>
+                      <span>{exam.submission_count} {exam.submission_count === 1 ? 'submissão' : 'submissões'}</span>
+                      {ea && <span>{ea.total_alunos} {ea.total_alunos === 1 ? 'aluno' : 'alunos'}</span>}
+                    </div>
+                    {ea && <PassRateBar rate={ea.pass_rate} />}
+                    <p className="text-xs text-gray-400 mt-2">{formatDate(exam.created_at)}</p>
                   </div>
-                  <div className="flex gap-4 text-xs text-gray-500 mb-1">
-                    <span>{exam.question_count} {exam.question_count === 1 ? 'questão' : 'questões'}</span>
-                    <span>{exam.submission_count} {exam.submission_count === 1 ? 'submissão' : 'submissões'}</span>
-                    {ea && <span>{ea.total_alunos} {ea.total_alunos === 1 ? 'aluno' : 'alunos'}</span>}
+                  <div className="flex justify-end mt-3 pt-3 border-t border-gray-100">
+                    <button
+                      onClick={() => setDeleteExamTarget(exam)}
+                      className="text-xs px-2.5 py-1.5 rounded-md border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      Excluir
+                    </button>
                   </div>
-                  {ea && <PassRateBar rate={ea.pass_rate} />}
-                  <p className="text-xs text-gray-400 mt-2">{formatDate(exam.created_at)}</p>
-                </button>
+                </div>
               )
-            })}
-          </div>
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!deleteExamTarget}
+        onClose={() => setDeleteExamTarget(null)}
+        onConfirm={confirmDeleteExam}
+        loading={deletingExam}
+        title="Excluir prova"
+        confirmLabel="Excluir prova"
+        message={deleteExamTarget
+          ? `Excluir a prova "${deleteExamTarget.filename}"? Todas as questões, test cases e submissões serão removidos permanentemente.`
+          : ''}
+      />
     </div>
   )
 }

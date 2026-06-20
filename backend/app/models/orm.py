@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON, Float
 from sqlalchemy.orm import relationship
 from app.models.database import Base
 
@@ -49,6 +49,7 @@ class Question(Base):
     exam_id = Column(Integer, ForeignKey("exams.id"))
     number = Column(String)
     statement = Column(Text)
+    points = Column(Float, default=1.0, server_default="1.0")  # valor da questão na nota
     required_structures = Column(JSON, default=list)
     forbidden_structures = Column(JSON, default=list)
     requires_loop = Column(Boolean, default=False)
@@ -102,6 +103,7 @@ class QuestionCluster(Base):
     cluster_label = Column(Integer)
     size = Column(Integer)
     dominant_error = Column(String, default="")
+    insight = Column(Text, default="")
     representative_submission_id = Column(Integer, ForeignKey("submissions.id"), nullable=True)
 
     question = relationship("Question")
@@ -119,3 +121,23 @@ class SubmissionTestResult(Base):
     passed = Column(Boolean)
 
     submission = relationship("Submission", back_populates="test_results")
+
+
+class ProcessingJob(Base):
+    """Rastreia tarefas longas (extração da prova via Gemini, avaliação em lote)
+    executadas em segundo plano, para que o usuário acompanhe o progresso sem
+    ficar preso à requisição."""
+    __tablename__ = "processing_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    kind = Column(String)                       # 'exam_upload' | 'bulk_submit'
+    status = Column(String, default="pending")  # pending | running | done | error
+    stage = Column(String, default="")          # descrição legível da etapa atual
+    total = Column(Integer, default=0)
+    processed = Column(Integer, default=0)
+    message = Column(Text, default="")
+    result = Column(JSON, default=dict)
+    exam_id = Column(Integer, ForeignKey("exams.id"), nullable=True)
+    professor_id = Column(Integer, ForeignKey("professors.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

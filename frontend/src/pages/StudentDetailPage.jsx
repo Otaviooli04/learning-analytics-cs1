@@ -102,6 +102,16 @@ export default function StudentDetailPage() {
                 {sub.submitted_at && (
                   <p className="text-xs text-gray-400 mt-1">{formatDate(sub.submitted_at)}</p>
                 )}
+                {sub.cluster_dominant_error && (
+                  <Link
+                    to={`/exam/${id}/questions/${sub.question_number}?tab=cluster`}
+                    className="inline-flex items-center gap-1 mt-1.5 text-xs px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors"
+                    title="Ver os grupos de dificuldade desta questão"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
+                    Grupo: {sub.cluster_dominant_error}{sub.cluster_size ? ` (${sub.cluster_size})` : ''}
+                  </Link>
+                )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <Badge color={diagColor(sub)}>{diagLabel(sub)}</Badge>

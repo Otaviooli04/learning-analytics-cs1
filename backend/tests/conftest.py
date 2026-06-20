@@ -14,8 +14,9 @@ from urllib.parse import urlparse, urlunparse
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../.env"))
 
 from app.main import app as fastapi_app
+from app.auth.dependencies import get_current_professor
 from app.models.database import Base, get_db
-from app.models.orm import Exam, Question, QuestionCluster, Submission, TestCase
+from app.models.orm import Exam, Professor, Question, QuestionCluster, Submission, TestCase, Turma
 import app.models.orm  # registra todos os modelos no metadata
 
 _parsed_url = urlparse(os.environ["DATABASE_URL"])
@@ -58,22 +59,58 @@ def clean_tables(db):
 
 
 @pytest.fixture()
-def client(db):
+def professor(db):
+    prof = Professor(email="prof@teste.com", nome="Professor Teste", senha_hash="x")
+    db.add(prof)
+    db.commit()
+    db.refresh(prof)
+    return prof
+
+
+@pytest.fixture()
+def client(db, professor):
     def override_get_db():
         yield db
 
     fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_current_professor] = lambda: professor
     with TestClient(fastapi_app) as c:
         yield c
     fastapi_app.dependency_overrides.clear()
 
 
+@pytest.fixture()
+def run_jobs_sync(db, monkeypatch):
+    """Executa os jobs de segundo plano de forma síncrona na sessão de teste.
+
+    Em produção `run_in_background` dispara uma thread com sessão própria (banco
+    de produção). Nos testes substituímos por execução síncrona no banco de teste,
+    espelhando o tratamento de erro real (status 'error' em vez de propagar)."""
+    from app.services.job_service import update_job
+
+    def _sync(job_id, target):
+        update_job(db, job_id, status="running")
+        try:
+            target(db, job_id)
+        except Exception as e:  # noqa: BLE001 — reportado no status do job
+            update_job(db, job_id, status="error", message=str(e))
+
+    monkeypatch.setattr("app.services.exam_service.run_in_background", _sync)
+    monkeypatch.setattr(
+        "app.services.bulk_submission_service.run_in_background", _sync, raising=False)
+    return _sync
+
+
 # --- factories ---
 
 @pytest.fixture()
-def exam_factory(db):
+def exam_factory(db, professor):
     def _create(filename="prova.pdf", questions=None):
-        exam = Exam(filename=filename, raw_text="texto da prova", created_at=datetime.now(timezone.utc))
+        turma = Turma(nome="Turma Teste", codigo="TT", professor_id=professor.id)
+        db.add(turma)
+        db.flush()
+        exam = Exam(filename=filename, raw_text="texto da prova",
+                    created_at=datetime.now(timezone.utc), turma_id=turma.id)
         db.add(exam)
         db.flush()
         for q in (questions or []):
