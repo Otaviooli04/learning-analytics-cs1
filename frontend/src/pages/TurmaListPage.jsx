@@ -1,17 +1,67 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { listTurmas, createTurma } from '../api/exam'
+import { listTurmas, createTurma, updateTurma, deleteTurma } from '../api/exam'
 import Spinner from '../components/Spinner'
+import Modal from '../components/Modal'
+import ConfirmDialog from '../components/ConfirmDialog'
+import ListControls from '../components/ListControls'
+
+const SORT_OPTIONS = [
+  { value: 'recent', label: 'Mais recentes' },
+  { value: 'oldest', label: 'Mais antigas' },
+  { value: 'name', label: 'Nome (A–Z)' },
+]
 
 export default function TurmaListPage() {
   const navigate = useNavigate()
   const [turmas, setTurmas] = useState([])
+  const [search, setSearch] = useState('')
+  const [sort, setSort] = useState('recent')
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [nome, setNome] = useState('')
   const [codigo, setCodigo] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
+
+  // edição / exclusão
+  const [editTurma, setEditTurma] = useState(null)
+  const [editNome, setEditNome] = useState('')
+  const [editCodigo, setEditCodigo] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const openEdit = (t) => { setEditTurma(t); setEditNome(t.nome); setEditCodigo(t.codigo) }
+
+  const saveEdit = async (e) => {
+    e.preventDefault()
+    if (!editNome.trim() || !editCodigo.trim()) return
+    setSaving(true)
+    try {
+      await updateTurma(editTurma.id, editNome.trim(), editCodigo.trim())
+      setTurmas(prev => prev.map(t => t.id === editTurma.id
+        ? { ...t, nome: editNome.trim(), codigo: editCodigo.trim() } : t))
+      setEditTurma(null)
+    } catch {
+      setError('Erro ao salvar turma.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const confirmDelete = async () => {
+    setDeleting(true)
+    try {
+      await deleteTurma(deleteTarget.id)
+      setTurmas(prev => prev.filter(t => t.id !== deleteTarget.id))
+      setDeleteTarget(null)
+    } catch {
+      setError('Erro ao excluir turma.')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   useEffect(() => {
     listTurmas()
@@ -42,6 +92,19 @@ export default function TurmaListPage() {
     if (!iso) return ''
     return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
   }
+
+  const displayed = turmas
+    .filter(t => {
+      const q = search.trim().toLowerCase()
+      if (!q) return true
+      return t.nome.toLowerCase().includes(q) || t.codigo.toLowerCase().includes(q)
+    })
+    .sort((a, b) => {
+      if (sort === 'name') return a.nome.localeCompare(b.nome, 'pt-BR')
+      const da = new Date(a.created_at).getTime()
+      const db = new Date(b.created_at).getTime()
+      return sort === 'oldest' ? da - db : db - da
+    })
 
   return (
     <div>
@@ -107,25 +170,90 @@ export default function TurmaListPage() {
           <p className="text-xs mt-1">Clique em "Nova turma" para começar.</p>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {turmas.map(t => (
-            <button
+        <>
+          <ListControls
+            search={search} onSearch={setSearch}
+            sort={sort} onSort={setSort}
+            sortOptions={SORT_OPTIONS}
+            placeholder="Buscar turma por nome ou código…"
+          />
+          {displayed.length === 0 ? (
+            <p className="text-center py-12 text-sm text-gray-400">Nenhuma turma encontrada para o filtro.</p>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {displayed.map(t => (
+            <div
               key={t.id}
-              onClick={() => navigate(`/turma/${t.id}`)}
-              className="bg-white rounded-xl border border-gray-200 p-5 text-left hover:border-purple-300 hover:shadow-sm transition-all"
+              className="bg-white rounded-xl border border-gray-200 p-5 hover:border-purple-300 hover:shadow-sm transition-all flex flex-col"
             >
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <h2 className="text-base font-semibold text-gray-900 leading-tight">{t.nome}</h2>
-                <span className="shrink-0 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-100 px-2 py-0.5 rounded-md">
-                  {t.codigo}
-                </span>
+              <div onClick={() => navigate(`/turma/${t.id}`)} className="cursor-pointer flex-1">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h2 className="text-base font-semibold text-gray-900 leading-tight">{t.nome}</h2>
+                  <span className="shrink-0 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-100 px-2 py-0.5 rounded-md">
+                    {t.codigo}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-500">{t.exam_count} {t.exam_count === 1 ? 'prova' : 'provas'}</p>
+                <p className="text-xs text-gray-400 mt-1">{formatDate(t.created_at)}</p>
               </div>
-              <p className="text-sm text-gray-500">{t.exam_count} {t.exam_count === 1 ? 'prova' : 'provas'}</p>
-              <p className="text-xs text-gray-400 mt-1">{formatDate(t.created_at)}</p>
-            </button>
-          ))}
-        </div>
+              <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
+                <button
+                  onClick={() => openEdit(t)}
+                  className="text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Editar
+                </button>
+                <button
+                  onClick={() => setDeleteTarget(t)}
+                  className="text-xs px-2.5 py-1.5 rounded-md border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  Excluir
+                </button>
+              </div>
+            </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
+
+      <Modal open={!!editTurma} onClose={() => setEditTurma(null)} title="Editar turma">
+        <form onSubmit={saveEdit} className="space-y-3">
+          <input
+            type="text" value={editNome} onChange={e => setEditNome(e.target.value)}
+            placeholder="Nome da turma"
+            className="w-full text-sm rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+          <input
+            type="text" value={editCodigo} onChange={e => setEditCodigo(e.target.value)}
+            placeholder="Código"
+            className="w-full text-sm rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={() => setEditTurma(null)}
+              className="text-sm px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" disabled={saving || !editNome.trim() || !editCodigo.trim()}
+              className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-40 transition-colors">
+              {saving && <Spinner className="w-4 h-4" />}
+              Salvar
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        loading={deleting}
+        title="Excluir turma"
+        confirmLabel="Excluir turma"
+        message={deleteTarget
+          ? `Excluir a turma "${deleteTarget.nome}"? Todas as provas, questões e submissões dela serão removidas permanentemente.`
+          : ''}
+      />
     </div>
   )
 }

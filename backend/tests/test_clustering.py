@@ -47,8 +47,11 @@ class TestClustering:
     def test_clustering_retorna_clusters_e_scatter(self, client, exam_factory, submission_factory):
         exam = exam_factory(questions=[{"number": "1"}])
         q = exam.questions[0]
-        for i in range(4):
-            submission_factory(q.id, code=f"int main(){{return {i};}}", error_category="Saída Incorreta")
+        # Duas categorias distintas: no nível 1 cada categoria forma um grupo.
+        submission_factory(q.id, code="int main(){return 0;}", error_category="Saída Incorreta")
+        submission_factory(q.id, code="int main(){return 1;}", error_category="Saída Incorreta")
+        submission_factory(q.id, code="int main(){return 2;}", error_category="Erro de Compilação")
+        submission_factory(q.id, code="int main(){return 3;}", error_category="Erro de Compilação")
 
         umap_p, hdbscan_p = _patch_ml([0, 0, 1, 1])
         with umap_p, hdbscan_p:
@@ -80,8 +83,9 @@ class TestClustering:
     def test_question_cluster_registros_criados(self, client, exam_factory, submission_factory, db):
         exam = exam_factory(questions=[{"number": "1"}])
         q = exam.questions[0]
-        for i in range(3):
-            submission_factory(q.id, code=f"int main(){{return {i};}}")
+        submission_factory(q.id, code="int main(){return 0;}", error_category="Saída Incorreta")
+        submission_factory(q.id, code="int main(){return 1;}", error_category="Saída Incorreta")
+        submission_factory(q.id, code="int main(){return 2;}", error_category="Erro de Compilação")
 
         umap_p, hdbscan_p = _patch_ml([0, 0, 1])
         with umap_p, hdbscan_p:
@@ -89,15 +93,15 @@ class TestClustering:
 
         clusters = db.query(QuestionCluster).filter(QuestionCluster.question_id == q.id).all()
         assert len(clusters) == 2
-        sizes = {c.cluster_label: c.size for c in clusters}
-        assert sizes[0] == 2
-        assert sizes[1] == 1
+        assert sorted(c.size for c in clusters) == [1, 2]
+        assert {c.dominant_error for c in clusters} == {"Saída Incorreta", "Erro de Compilação"}
 
     def test_clustering_idempotente_sobrescreve_anterior(self, client, exam_factory, submission_factory, db):
         exam = exam_factory(questions=[{"number": "1"}])
         q = exam.questions[0]
-        for i in range(3):
-            submission_factory(q.id, code=f"int main(){{return {i};}}")
+        submission_factory(q.id, code="int main(){return 0;}", error_category="Saída Incorreta")
+        submission_factory(q.id, code="int main(){return 1;}", error_category="Saída Incorreta")
+        submission_factory(q.id, code="int main(){return 2;}", error_category="Erro de Compilação")
 
         for _ in range(2):
             umap_p, hdbscan_p = _patch_ml([0, 0, 1])
@@ -108,17 +112,19 @@ class TestClustering:
         clusters = db.query(QuestionCluster).filter(QuestionCluster.question_id == q.id).all()
         assert len(clusters) == 2
 
-    def test_outliers_nao_geram_cluster(self, client, exam_factory, submission_factory):
+    def test_categoria_pequena_vira_um_grupo(self, client, exam_factory, submission_factory):
+        # No agrupamento em dois níveis, uma categoria abaixo do mínimo de
+        # sub-agrupamento forma um grupo único, sem super-segmentar.
         exam = exam_factory(questions=[{"number": "1"}])
         q = exam.questions[0]
         for i in range(4):
-            submission_factory(q.id, code=f"int main(){{return {i};}}")
+            submission_factory(q.id, code=f"int main(){{return {i};}}", error_category="Saída Incorreta")
 
-        umap_p, hdbscan_p = _patch_ml([0, 0, -1, -1])
+        umap_p, hdbscan_p = _patch_ml([0, 0, 1, 1])
         with umap_p, hdbscan_p:
             resp = client.post(f"/exam/{exam.id}/questions/1/cluster")
 
         assert resp.status_code == 200
         clusters = resp.json()["clusters"]
         assert len(clusters) == 1
-        assert clusters[0]["cluster_id"] == 0
+        assert clusters[0]["dominant_error"] == "Saída Incorreta"

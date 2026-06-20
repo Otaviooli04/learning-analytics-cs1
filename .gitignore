@@ -42,6 +42,20 @@ Thumbs.db
 annotations.txt
 CLAUDE.md
 
+# Artefatos gerados / dados locais (regeneráveis ou descartáveis)
+backend/results/plots/
+backend/comparacao_demo.png
+submissoes_par_impar.zip
+
+# Pesquisa/validação e escrita do TCC — mantidos apenas localmente, fora do
+# repositório do sistema (dados de experimento, extração de PDF, figuras, prosa).
+backend/results/
+backend/tools/analyze_real_provas.py
+backend/tools/pdf_corrections.py
+backend/tools/make_figures.py
+docs/evidence_pack_resultados.md
+docs/tcc_artefatos.tex
+
 # Logs
 *.log
 logs/

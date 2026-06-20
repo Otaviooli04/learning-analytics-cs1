@@ -9,31 +9,73 @@ from app.ml.cluster import FeatureStrategy, cluster_question
 from app.models.database import get_db
 from app.models.orm import Exam, Professor, Question, QuestionCluster, TestCase as TestCaseORM
 from app.models.schemas import (
-    BulkSubmissionResponse,
     ClusterInfo,
     ClusteringResponse,
     ClusterInsight,
     ExamResponse,
     ExamResultsResponse,
     ExamStudentsResponse,
+    ExamUpdate,
+    ExamUploadStartResponse,
     InsightsResponse,
+    JobStartResponse,
+    QuestionCreate,
     QuestionResponse,
+    QuestionUpdate,
     ScatterPoint,
     StudentDetailResponse,
     TestCaseAddRequest,
     TestCaseResponse,
     TestCaseUpdateRequest,
 )
-from app.services.bulk_submission_service import process_bulk_zip
+from app.services.bulk_submission_service import start_bulk_processing
 from app.services.exam_service import (
     add_test_cases,
+    create_question,
+    delete_exam,
+    delete_question,
     get_exam_results,
     get_exam_students,
     get_student_detail,
-    process_exam_upload,
+    start_exam_processing,
+    update_exam,
+    update_question,
 )
 
 router = APIRouter(prefix="/exam", tags=["exam"])
+
+
+def _failing_summary(submissions) -> dict:
+    """Por grupo (cluster_id): rótulo do sintoma e QUANTOS casos de teste o grupo
+    falha. Só rotula quando todos os membros compartilham a MESMA assinatura de
+    falha (grupo coeso); grupos de assinatura mista ficam sem rótulo/contagem.
+    O grupo "Correto" recebe contagem 0. Usado para descrever e ORDENAR os
+    cartões (mais casos falhos = dificuldade mais severa)."""
+    from app.ml.cluster import failure_signature
+    sigs_by_label: dict = {}
+    for s in submissions:
+        if s.cluster_id is not None:
+            sigs_by_label.setdefault(s.cluster_id, set()).add(failure_signature(s))
+
+    out: dict = {}
+    for label, sigs in sigs_by_label.items():
+        if len(sigs) != 1:
+            out[label] = (None, None)
+            continue
+        sig = next(iter(sigs))
+        if not sig:
+            out[label] = (None, None)
+            continue
+        failed = [i + 1 for i, ok in enumerate(sig) if not ok]
+        if not failed:
+            out[label] = (None, 0)
+        elif len(failed) == len(sig):
+            out[label] = ("falha todos os casos", len(failed))
+        elif len(failed) == 1:
+            out[label] = (f"falha o caso {failed[0]}", 1)
+        else:
+            out[label] = ("falha os casos " + ", ".join(map(str, failed)), len(failed))
+    return out
 
 
 # ── público: alunos precisam carregar a prova antes de submeter ──────────────
@@ -46,7 +88,7 @@ def get_exam(exam_id: int, db: Session = Depends(get_db)):
 
 
 # ── rotas protegidas (professor autenticado) ─────────────────────────────────
-@router.post("/upload", response_model=ExamResponse)
+@router.post("/upload", response_model=ExamUploadStartResponse)
 async def upload_exam(
     file: UploadFile = File(...),
     turma_id: Optional[int] = Form(None),
@@ -66,12 +108,78 @@ async def upload_exam(
             raise HTTPException(status_code=404, detail="Turma não encontrada.")
     file_bytes = await file.read()
     try:
-        exam = process_exam_upload(file_bytes, file.filename, db, turma_id=turma_id)
-        return _exam_to_response(exam)
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        exam, job = start_exam_processing(
+            file_bytes, file.filename, db, turma_id=turma_id, professor_id=professor.id)
+        return ExamUploadStartResponse(exam_id=exam.id, job_id=job.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.patch("/{exam_id}", response_model=ExamResponse)
+def patch_exam(
+    exam_id: int,
+    body: ExamUpdate,
+    db: Session = Depends(get_db),
+    professor: Professor = Depends(get_current_professor),
+):
+    exam = get_exam_or_404(exam_id, db, professor_id=professor.id)
+    if body.turma_id is not None:
+        from app.models.orm import Turma
+        turma = db.query(Turma).filter(
+            Turma.id == body.turma_id, Turma.professor_id == professor.id,
+        ).first()
+        if not turma:
+            raise HTTPException(status_code=404, detail="Turma não encontrada.")
+    update_exam(exam, db, filename=body.filename, turma_id=body.turma_id)
+    return _exam_to_response(exam)
+
+
+@router.delete("/{exam_id}", status_code=204)
+def remove_exam(
+    exam_id: int,
+    db: Session = Depends(get_db),
+    professor: Professor = Depends(get_current_professor),
+):
+    exam = get_exam_or_404(exam_id, db, professor_id=professor.id)
+    delete_exam(exam, db)
+
+
+@router.post("/{exam_id}/questions", response_model=QuestionResponse, status_code=201)
+def post_question(
+    exam_id: int,
+    body: QuestionCreate,
+    db: Session = Depends(get_db),
+    professor: Professor = Depends(get_current_professor),
+):
+    exam = get_exam_or_404(exam_id, db, professor_id=professor.id)
+    if any(q.number == body.number for q in exam.questions):
+        raise HTTPException(status_code=409, detail=f"Já existe a questão {body.number}.")
+    question = create_question(exam.id, body.model_dump(), db)
+    return _question_to_response(question)
+
+
+@router.put("/{exam_id}/questions/{question_number}", response_model=QuestionResponse)
+def put_question(
+    exam_id: int,
+    question_number: str,
+    body: QuestionUpdate,
+    db: Session = Depends(get_db),
+    professor: Professor = Depends(get_current_professor),
+):
+    question = get_question_or_404(exam_id, question_number, db, professor_id=professor.id)
+    update_question(question, body.model_dump(exclude_unset=True), db)
+    return _question_to_response(question)
+
+
+@router.delete("/{exam_id}/questions/{question_number}", status_code=204)
+def remove_question(
+    exam_id: int,
+    question_number: str,
+    db: Session = Depends(get_db),
+    professor: Professor = Depends(get_current_professor),
+):
+    question = get_question_or_404(exam_id, question_number, db, professor_id=professor.id)
+    delete_question(question, db)
 
 
 @router.get("/{exam_id}/questions/{question_number}/testcases", response_model=list[TestCaseResponse])
@@ -140,7 +248,7 @@ def delete_question_testcase(
     db.commit()
 
 
-@router.post("/{exam_id}/submissions/bulk", response_model=BulkSubmissionResponse)
+@router.post("/{exam_id}/submissions/bulk", response_model=JobStartResponse)
 async def bulk_submit(
     exam_id: int,
     file: UploadFile = File(...),
@@ -155,7 +263,8 @@ async def bulk_submit(
     get_exam_or_404(exam_id, db, professor_id=professor.id)
     zip_bytes = await file.read()
     try:
-        return process_bulk_zip(zip_bytes, exam_id, format, db)
+        job = start_bulk_processing(zip_bytes, exam_id, format, db, professor_id=professor.id)
+        return JobStartResponse(job_id=job.id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao processar ZIP: {e}")
 
@@ -178,7 +287,7 @@ def get_student(
     professor: Professor = Depends(get_current_professor),
 ):
     exam = get_exam_or_404(exam_id, db, professor_id=professor.id)
-    return get_student_detail(exam, matricula)
+    return get_student_detail(exam, matricula, db)
 
 
 @router.get("/{exam_id}/results", response_model=ExamResultsResponse)
@@ -207,13 +316,18 @@ def run_clustering(
     db.refresh(question)
     clusters_db = db.query(QuestionCluster).filter(QuestionCluster.question_id == question.id).all()
     clusters_map = {qc.cluster_label: qc for qc in clusters_db}
+    failing = _failing_summary(question.submissions)
     clusters_out = [
         ClusterInfo(
             cluster_id=c["cluster_id"],
             size=c["size"],
             dominant_error=c["dominant_error"],
+            failing_label=failing.get(c["cluster_id"], (None, None))[0],
+            failing_count=failing.get(c["cluster_id"], (None, None))[1],
             representative_submission_id=clusters_map[c["cluster_id"]].representative_submission_id
             if c["cluster_id"] in clusters_map else None,
+            representative_matricula=clusters_map[c["cluster_id"]].representative.matricula
+            if c["cluster_id"] in clusters_map and clusters_map[c["cluster_id"]].representative else None,
             representative_code=clusters_map[c["cluster_id"]].representative.code
             if c["cluster_id"] in clusters_map and clusters_map[c["cluster_id"]].representative else None,
         )
@@ -229,10 +343,61 @@ def run_clustering(
     )
 
 
+@router.get("/{exam_id}/questions/{question_number}/groups")
+def get_groups(
+    exam_id: int,
+    question_number: str,
+    db: Session = Depends(get_db),
+    professor: Professor = Depends(get_current_professor),
+):
+    """Grupos de dificuldade já salvos, sem re-rodar. Alimenta a aba ao abrir:
+    o agrupamento roda automaticamente no fim do lote (ou via 'Recalcular')."""
+    question = get_question_or_404(exam_id, question_number, db, professor_id=professor.id)
+    clusters_db = db.query(QuestionCluster).filter(
+        QuestionCluster.question_id == question.id).all()
+    if not clusters_db:
+        return {"has_groups": False, "question_number": question_number}
+
+    scatter = [
+        {"x": float(s.umap_x), "y": float(s.umap_y),
+         "cluster_id": s.cluster_id, "matricula": s.matricula}
+        for s in question.submissions
+        if s.cluster_id is not None and s.umap_x is not None and s.umap_y is not None
+    ]
+    # Rótulo do sintoma por grupo: quais (e quantos) casos de teste o grupo falha.
+    failing = _failing_summary(question.submissions)
+    clusters = [
+        {"cluster_id": qc.cluster_label, "size": qc.size,
+         "dominant_error": qc.dominant_error,
+         "failing_label": failing.get(qc.cluster_label, (None, None))[0],
+         "failing_count": failing.get(qc.cluster_label, (None, None))[1],
+         "representative_submission_id": qc.representative_submission_id,
+         "representative_matricula": qc.representative.matricula if qc.representative else None,
+         "representative_code": qc.representative.code if qc.representative else None}
+        for qc in clusters_db
+    ]
+    insights = [
+        {"cluster_id": qc.cluster_label, "size": qc.size,
+         "dominant_error": qc.dominant_error, "insight": qc.insight or ""}
+        for qc in clusters_db
+    ]
+    return {
+        "has_groups": True,
+        "question_number": question_number,
+        "total_submissions": len(scatter),
+        "clusters": clusters,
+        "scatter": scatter,
+        "silhouette_score": None,
+        "strategy": "tfidf_behavioral",
+        "insights": insights,
+    }
+
+
 @router.post("/{exam_id}/questions/{question_number}/insights", response_model=InsightsResponse)
 def run_insights(
     exam_id: int,
     question_number: str,
+    force: bool = Query(default=False),
     db: Session = Depends(get_db),
     professor: Professor = Depends(get_current_professor),
 ):
@@ -240,22 +405,43 @@ def run_insights(
     clusters_db = db.query(QuestionCluster).filter(QuestionCluster.question_id == question.id).all()
     if not clusters_db:
         raise HTTPException(status_code=422, detail="Nenhum cluster encontrado. Execute o clustering antes de gerar insights.")
-    clusters_payload = [
-        {
-            "cluster_id": qc.cluster_label,
-            "size": qc.size,
-            "dominant_error": qc.dominant_error,
-            "representative_code": qc.representative.code if qc.representative else "",
-        }
-        for qc in clusters_db
-    ]
-    try:
-        raw_insights = generate_cluster_insights(question.statement, clusters_payload)
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+
+    # Só gera via Gemini os clusters ainda sem insight salvo (ou todos se force).
+    # O insight fica persistido em QuestionCluster; re-clusterizar apaga as linhas
+    # e invalida o cache naturalmente.
+    pending = [qc for qc in clusters_db if force or not qc.insight]
+    if pending:
+        payload = [
+            {
+                "cluster_id": qc.cluster_label,
+                "size": qc.size,
+                "dominant_error": qc.dominant_error,
+                "representative_code": qc.representative.code if qc.representative else "",
+            }
+            for qc in pending
+        ]
+        try:
+            generated = generate_cluster_insights(question.statement, payload)
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        by_label = {qc.cluster_label: qc for qc in pending}
+        for item in generated:
+            qc = by_label.get(item["cluster_id"])
+            if qc is not None:
+                qc.insight = item["insight"]
+        db.commit()
+
     return InsightsResponse(
         question_number=question_number,
-        insights=[ClusterInsight(**i) for i in raw_insights],
+        insights=[
+            ClusterInsight(
+                cluster_id=qc.cluster_label,
+                size=qc.size,
+                dominant_error=qc.dominant_error,
+                insight=qc.insight or "",
+            )
+            for qc in clusters_db
+        ],
     )
 
 
@@ -293,6 +479,59 @@ def get_question_submissions(
     }
 
 
+_SINGLE_LINE_HINTS = (
+    "uma unica linha", "uma única linha", "em uma linha", "numa unica linha",
+    "numa única linha", "em uma so linha", "em uma só linha",
+    "um unico caractere", "um único caractere",
+)
+
+
+def _question_warnings(q: Question) -> list[str]:
+    """Sinaliza extrações suspeitas para o professor revisar antes de confiar no veredito."""
+    warnings = []
+
+    subs = q.submissions
+    if subs and not any(s.all_tests_passed for s in subs):
+        warnings.append(
+            f"Nenhuma das {len(subs)} submissões passou. Pode ser que o gabarito ou "
+            "as estruturas exigidas estejam errados. Confira os casos de teste."
+        )
+
+    statement = (q.statement or "").lower()
+    if any(h in statement for h in _SINGLE_LINE_HINTS) and any(
+        "\n" in (tc.expected_output or "") for tc in q.test_cases
+    ):
+        warnings.append(
+            "Algum caso de teste tem a saída esperada quebrada em mais de uma linha, "
+            "mas o enunciado pede uma única linha. Pode ser quebra de linha do PDF."
+        )
+
+    return warnings
+
+
+def _question_to_response(q: Question) -> QuestionResponse:
+    return QuestionResponse(
+        id=q.id,
+        number=q.number,
+        statement=q.statement,
+        points=q.points if q.points is not None else 1.0,
+        required_structures=q.required_structures or [],
+        forbidden_structures=q.forbidden_structures or [],
+        requires_loop=q.requires_loop,
+        required_functions=q.required_functions or [],
+        test_case_count=len(q.test_cases),
+        warnings=_question_warnings(q),
+    )
+
+
+def _question_sort_key(q):
+    """Ordena por número da questão (numérico quando possível: 2 antes de 10)."""
+    try:
+        return (0, int(q.number))
+    except (TypeError, ValueError):
+        return (1, q.number or "")
+
+
 def _exam_to_response(exam: Exam) -> ExamResponse:
     return ExamResponse(
         id=exam.id,
@@ -300,17 +539,6 @@ def _exam_to_response(exam: Exam) -> ExamResponse:
         created_at=exam.created_at.isoformat() if exam.created_at else "",
         turma_id=exam.turma_id,
         turma_nome=exam.turma.nome if exam.turma else None,
-        questions=[
-            QuestionResponse(
-                id=q.id,
-                number=q.number,
-                statement=q.statement,
-                required_structures=q.required_structures or [],
-                forbidden_structures=q.forbidden_structures or [],
-                requires_loop=q.requires_loop,
-                required_functions=q.required_functions or [],
-                test_case_count=len(q.test_cases),
-            )
-            for q in exam.questions
-        ],
+        total_points=sum((q.points if q.points is not None else 1.0) for q in exam.questions),
+        questions=[_question_to_response(q) for q in sorted(exam.questions, key=_question_sort_key)],
     )

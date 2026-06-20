@@ -26,6 +26,11 @@ class TurmaCreate(BaseModel):
     codigo: str
 
 
+class TurmaUpdate(BaseModel):
+    nome: str
+    codigo: str
+
+
 class ExamSummary(BaseModel):
     id: int
     filename: str
@@ -98,6 +103,7 @@ class CodeQuestion(BaseModel):
     forbidden_structures: List[str] = []
     requires_loop: bool = False
     required_functions: List[FunctionRequirement] = []
+    test_cases: List[TestCase] = []
 
 
 class ExamStructure(BaseModel):
@@ -107,6 +113,30 @@ class ExamStructure(BaseModel):
 class ExamUploadResponse(BaseModel):
     raw_text: str
     structure: ExamStructure
+
+
+class ExamUploadStartResponse(BaseModel):
+    """Resposta imediata do upload: a prova já existe, mas as questões são
+    extraídas pelo Gemini em segundo plano (acompanhar via job_id)."""
+    exam_id: int
+    job_id: int
+
+
+class JobStartResponse(BaseModel):
+    job_id: int
+
+
+class JobResponse(BaseModel):
+    id: int
+    kind: str
+    status: str
+    stage: str
+    total: int
+    processed: int
+    message: str
+    result: Optional[dict] = None
+    exam_id: Optional[int] = None
+    created_at: str
 
 
 class CodeSubmissionRequest(BaseModel):
@@ -158,15 +188,51 @@ class TestCaseUpdateRequest(BaseModel):
     expected_output: str
 
 
+class ExamUpdate(BaseModel):
+    filename: Optional[str] = None
+    turma_id: Optional[int] = None
+
+
+class QuestionCreate(BaseModel):
+    number: str
+    statement: str
+    points: float = 1.0
+    required_structures: List[str] = []
+    forbidden_structures: List[str] = []
+    requires_loop: bool = False
+    required_functions: List[FunctionRequirement] = []
+
+
+class QuestionUpdate(BaseModel):
+    number: Optional[str] = None
+    statement: Optional[str] = None
+    points: Optional[float] = None
+    required_structures: Optional[List[str]] = None
+    forbidden_structures: Optional[List[str]] = None
+    requires_loop: Optional[bool] = None
+    required_functions: Optional[List[FunctionRequirement]] = None
+
+
+class ProfessorUpdate(BaseModel):
+    nome: str
+
+
+class PasswordChange(BaseModel):
+    senha_atual: str
+    senha_nova: str
+
+
 class QuestionResponse(BaseModel):
     id: int
     number: str
     statement: str
+    points: float = 1.0
     required_structures: List[str]
     forbidden_structures: List[str]
     requires_loop: bool
     required_functions: List[FunctionRequirement] = []
     test_case_count: int
+    warnings: List[str] = []
 
 
 class ExamResponse(BaseModel):
@@ -175,6 +241,7 @@ class ExamResponse(BaseModel):
     created_at: str
     turma_id: Optional[int] = None
     turma_nome: Optional[str] = None
+    total_points: float = 0.0
     questions: List[QuestionResponse]
 
 
@@ -187,6 +254,8 @@ class SubmissionResult(BaseModel):
     submitted_at: str
     matricula: Optional[str] = None
     test_results: List[TestResult] = []
+    tests_passed: int = 0
+    tests_total: int = 0
 
 
 class QuestionSubmissionsResponse(BaseModel):
@@ -200,6 +269,7 @@ class StudentQuestionStatus(BaseModel):
     submission_id: Optional[int]
     passed: Optional[bool]
     error_category: Optional[str]
+    compile_error: Optional[bool] = None
 
 
 class StudentSummary(BaseModel):
@@ -227,6 +297,11 @@ class StudentSubmissionDetail(BaseModel):
     actionable_feedback: str
     submitted_at: Optional[str]
     test_results: List[TestResult]
+    # Grupo de dificuldade desta submissão (presente só se o agrupamento da
+    # questão já rodou). Liga o nível Aluno ao nível Questão.
+    cluster_id: Optional[int] = None
+    cluster_dominant_error: Optional[str] = None
+    cluster_size: Optional[int] = None
 
 
 class StudentDetailResponse(BaseModel):
@@ -240,6 +315,22 @@ class StudentDetailResponse(BaseModel):
 class ErrorCount(BaseModel):
     error_category: str
     count: int
+    matriculas: List[str] = []
+
+
+class TestCaseStat(BaseModel):
+    input: str
+    expected_output: str
+    total: int
+    failed: int
+    fail_rate: int
+    failed_matriculas: List[str] = []
+
+
+class CompileErrorCount(BaseModel):
+    message: str
+    count: int
+    matriculas: List[str] = []
 
 
 class QuestionResults(BaseModel):
@@ -247,7 +338,10 @@ class QuestionResults(BaseModel):
     statement: str
     total_submissions: int
     passed_count: int
+    partial_count: int = 0
     error_distribution: List[ErrorCount]
+    testcase_stats: List[TestCaseStat] = []
+    compile_errors: List[CompileErrorCount] = []
     submissions: List[SubmissionResult]
 
 
@@ -261,7 +355,10 @@ class ClusterInfo(BaseModel):
     cluster_id: int
     size: int
     dominant_error: str
+    failing_label: Optional[str] = None
+    failing_count: Optional[int] = None
     representative_submission_id: Optional[int]
+    representative_matricula: Optional[str] = None
     representative_code: Optional[str]
 
 

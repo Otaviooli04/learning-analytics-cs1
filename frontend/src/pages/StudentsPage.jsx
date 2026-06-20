@@ -18,15 +18,15 @@ function StatusCell({ status }) {
       </span>
     )
   }
-  if (status.error_category === 'Erro de compilação') {
+  if (status.compile_error) {
     return (
-      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-red-100 text-red-700 text-xs font-semibold">
+      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-red-100 text-red-700 text-xs font-semibold" title={status.error_category}>
         ✗
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-yellow-100 text-yellow-700 text-xs font-semibold">
+    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-yellow-100 text-yellow-700 text-xs font-semibold" title={status.error_category}>
       ~
     </span>
   )
@@ -54,6 +54,10 @@ export default function StudentsPage() {
     ? Math.round(data.students.reduce((acc, s) => acc + (s.answered_count > 0 ? s.passed_count / s.answered_count : 0), 0) / totalStudents * 100)
     : 0
 
+  const atRisk = data.students
+    .filter(s => s.answered_count > 0 && s.passed_count / s.answered_count < 0.4)
+    .sort((a, b) => (a.passed_count / a.answered_count) - (b.passed_count / b.answered_count))
+
   return (
     <div>
       <div className="flex items-center gap-2 text-sm text-gray-400 mb-6">
@@ -69,6 +73,33 @@ export default function StudentsPage() {
           <span><span className="font-semibold text-gray-900">{avgPass}%</span> acerto médio</span>
         </div>
       </div>
+
+      {atRisk.length > 0 && (
+        <div className="mb-6 rounded-xl border border-red-100 bg-red-50/60 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+            <h2 className="text-sm font-semibold text-red-700">Alunos em risco ({atRisk.length})</h2>
+            <span className="text-xs text-red-500">menos de 40% de acerto</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {atRisk.map(s => {
+              const pct = Math.round(s.passed_count / s.answered_count * 100)
+              return (
+                <button
+                  key={s.matricula}
+                  onClick={() => navigate(`/exam/${id}/students/${encodeURIComponent(s.matricula)}`)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs hover:border-red-300 hover:shadow-sm transition-all"
+                >
+                  <span className="font-medium text-gray-900">{s.matricula}</span>
+                  <span className="text-red-600 font-semibold">{s.passed_count}/{s.answered_count} ({pct}%)</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {totalStudents === 0 ? (
         <div className="text-center py-16 text-gray-400">

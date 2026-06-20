@@ -7,6 +7,8 @@ import pytest
 from unittest.mock import patch
 
 from tests.conftest import fastapi_app, get_db, TestingSession
+from app.auth.dependencies import get_current_professor
+from app.models.orm import Professor, Turma
 
 # ---------------------------------------------------------------------------
 # Códigos C reais usados nos testes
@@ -38,6 +40,19 @@ CODE_COMPILE_ERROR = """\
 int main() {
     int n
     scanf("%d", &n);
+    return 0;
+}
+"""
+
+# Usa math.h (sqrt com valor de runtime): exige linkar a libm (-lm). Serve de
+# regressão para o fix do linker — sem -lm o gcc dá "undefined reference".
+CODE_SQRT_MATH = """\
+#include <stdio.h>
+#include <math.h>
+int main() {
+    double x;
+    scanf("%lf", &x);
+    printf("%.2f\\n", sqrt(x));
     return 0;
 }
 """
@@ -124,9 +139,15 @@ def int_client():
     def override_get_db():
         yield db
 
+    professor = Professor(email="prof@teste.com", nome="Professor Teste", senha_hash="x")
+    db.add(professor)
+    db.commit()
+    db.refresh(professor)
+
     fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_current_professor] = lambda: professor
     with TestClient(fastapi_app) as c:
-        yield c, db
+        yield c, db, professor
     fastapi_app.dependency_overrides.clear()
     db.rollback()
     from tests.conftest import Base, engine
@@ -143,7 +164,7 @@ def int_client():
 @pytest.mark.integration
 class TestDockerGCC:
     def test_compilacao_e_execucao_real(self, int_client):
-        client, db = int_client
+        client, db, professor = int_client
 
         # Cria prova e questão diretamente (sem chamar Gemini)
         from app.models.orm import Exam, Question, TestCase
@@ -178,7 +199,7 @@ class TestDockerGCC:
         assert data["diagnosis"]["error_category"] == "Correto"
 
     def test_saida_incorreta_real(self, int_client):
-        client, db = int_client
+        client, db, professor = int_client
 
         from app.models.orm import Exam, Question, TestCase
         exam = Exam(filename="prova.pdf", raw_text="texto")
@@ -202,8 +223,36 @@ class TestDockerGCC:
         assert data["all_tests_passed"] is False
         assert data["diagnosis"]["error_category"] == "Saída Incorreta"
 
+    def test_codigo_com_math_h_linka_libm(self, int_client):
+        """Regressão do fix -lm: código de CS1 com sqrt/pow (math.h) deve compilar
+        e passar — sem -lm o gcc reprova código correto com 'undefined reference'."""
+        client, db, professor = int_client
+
+        from app.models.orm import Exam, Question, TestCase
+        exam = Exam(filename="prova.pdf", raw_text="texto")
+        db.add(exam)
+        db.flush()
+        q = Question(exam_id=exam.id, number="1", statement="Raiz quadrada",
+                     required_structures=[], forbidden_structures=[], requires_loop=False)
+        db.add(q)
+        db.flush()
+        db.add(TestCase(question_id=q.id, input="16", expected_output="4.00"))
+        db.add(TestCase(question_id=q.id, input="2", expected_output="1.41"))
+        db.commit()
+
+        resp = client.post("/submission/evaluate", json={
+            "exam_id": exam.id,
+            "question_number": "1",
+            "code": CODE_SQRT_MATH,
+        })
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["compile_error"] == ""
+        assert data["all_tests_passed"] is True
+
     def test_erro_de_compilacao_real(self, int_client):
-        client, db = int_client
+        client, db, professor = int_client
 
         from app.models.orm import Exam, Question
         exam = Exam(filename="prova.pdf", raw_text="texto")
@@ -229,31 +278,45 @@ class TestDockerGCC:
 @pytest.mark.integration
 class TestGeminiReal:
     def test_upload_extrai_questoes_com_gemini_real(self, int_client):
-        client, db = int_client
+        client, db, professor = int_client
 
+        # A extração roda em segundo plano via thread; no teste, executamos o job
+        # de forma síncrona na sessão de teste (a thread real usa o banco de produção).
+        def run_sync(job_id, target):
+            target(db, job_id)
+
+        # Enviamos como DOCX para o extrator usar o texto mockado (caminho de
+        # texto). Com PDF, a rota mandaria o arquivo nativo ao Gemini e o
+        # MINIMAL_PDF (vazio) não tem questão a extrair.
         with patch("app.services.exam_service.parse_document", return_value=(
             "Questão 1: Escreva um programa em C que leia um número inteiro e "
             "imprima 'par' se for par ou 'impar' se for ímpar, usando if/else."
-        )):
+        )), patch("app.services.exam_service.run_in_background", side_effect=run_sync):
             resp = client.post(
                 "/exam/upload",
-                files={"file": ("prova.pdf", MINIMAL_PDF, "application/pdf")},
+                files={"file": ("prova.docx", b"docx-fake",
+                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
             )
 
         assert resp.status_code == 200
-        data = resp.json()
-        assert len(data["questions"]) >= 1
-        q = data["questions"][0]
+        exam_id = resp.json()["exam_id"]
+
+        exam = client.get(f"/exam/{exam_id}").json()
+        assert len(exam["questions"]) >= 1
+        q = exam["questions"][0]
         assert q["number"] is not None
         assert len(q["statement"]) > 10
 
     def test_insights_com_gemini_real(self, int_client):
-        client, db = int_client
+        client, db, professor = int_client
 
         from app.models.orm import Exam, Question, QuestionCluster, Submission
         from datetime import datetime, timezone
 
-        exam = Exam(filename="prova.pdf", raw_text="texto")
+        turma = Turma(nome="Turma Teste", codigo="TT", professor_id=professor.id)
+        db.add(turma)
+        db.flush()
+        exam = Exam(filename="prova.pdf", raw_text="texto", turma_id=turma.id)
         db.add(exam)
         db.flush()
         q = Question(
@@ -307,13 +370,16 @@ class TestFluxoCompleto:
         4. Roda clustering (UMAP + HDBSCAN reais)
         5. Gera insights com Gemini real
         """
-        client, db = int_client
+        client, db, professor = int_client
 
         from app.models.orm import Exam, Question, TestCase, Submission
         from app.models.orm import QuestionCluster
 
         # 1. Cria prova
-        exam = Exam(filename="prova_e2e.pdf", raw_text="texto")
+        turma = Turma(nome="Turma Teste", codigo="TT", professor_id=professor.id)
+        db.add(turma)
+        db.flush()
+        exam = Exam(filename="prova_e2e.pdf", raw_text="texto", turma_id=turma.id)
         db.add(exam)
         db.flush()
         q = Question(
@@ -574,12 +640,15 @@ int main() {
 """
 
     def test_clustering_com_20_submissoes_diversas(self, int_client):
-        client, db = int_client
+        client, db, professor = int_client
 
         from app.models.orm import Exam, Question, TestCase, Submission, QuestionCluster
 
         # Prova e questão
-        exam = Exam(filename="prova_diversidade.pdf", raw_text="texto")
+        turma = Turma(nome="Turma Teste", codigo="TT", professor_id=professor.id)
+        db.add(turma)
+        db.flush()
+        exam = Exam(filename="prova_diversidade.pdf", raw_text="texto", turma_id=turma.id)
         db.add(exam)
         db.flush()
         q = Question(
