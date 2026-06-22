@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { getQuestionSubmissions } from '../api/exam'
 import Spinner from '../components/Spinner'
+import CodeBlock from '../components/CodeBlock'
+import { compileErrorLines } from '../utils/highlightLines'
 
 export default function SubmissionsPage() {
   const { id, num } = useParams()
@@ -94,9 +96,9 @@ export default function SubmissionsPage() {
 
               {expanded[sub.id] && (
                 <div className="border-t border-gray-100">
-                  <pre className="bg-gray-900 text-green-400 text-xs font-mono p-4 overflow-x-auto whitespace-pre-wrap leading-relaxed">
-                    {sub.code}
-                  </pre>
+                  <div className="px-4 pt-2 pb-4">
+                    <CodeBlock dark code={sub.code} highlight={compileErrorLines(sub.compile_error, sub.code)} />
+                  </div>
 
                   {sub.compile_error && (
                     <div className="px-5 py-3 border-t border-gray-100">

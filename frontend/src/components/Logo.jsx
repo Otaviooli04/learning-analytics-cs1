@@ -1,5 +1,4 @@
-// Marca do sistema: barras ascendentes (analytics) com linha de tendência.
-// Mesmo símbolo do favicon — usar em header, login e onde a identidade aparecer.
+// Marca do sistema (mesmo símbolo do favicon).
 export default function Logo({ className = 'w-8 h-8' }) {
   return (
     <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">

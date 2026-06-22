@@ -15,6 +15,7 @@ import BarList from '../components/BarList'
 import CodeBlock from '../components/CodeBlock'
 import ListControls from '../components/ListControls'
 import { shortError } from '../utils/errorLabels'
+import { compileErrorLines } from '../utils/highlightLines'
 
 const SUB_SORTS = [
   { value: 'situacao', label: 'Situação' },
@@ -363,9 +364,7 @@ export default function QuestionPage() {
                         {s.actionable_feedback && (
                           <p className="text-xs text-gray-500 italic">{s.actionable_feedback}</p>
                         )}
-                        <pre className="text-xs font-mono bg-gray-50 rounded-lg p-3 overflow-x-auto text-gray-600 whitespace-pre-wrap max-h-48">
-                          {s.code}
-                        </pre>
+                        <CodeBlock code={s.code} highlight={compileErrorLines(s.compile_error, s.code)} />
                         {s.compile_error && (
                           <pre className="text-xs font-mono bg-red-50 rounded-lg p-3 text-red-600 overflow-x-auto whitespace-pre-wrap">
                             {s.compile_error}

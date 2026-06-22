@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom'
 import { getStudentDetail } from '../api/exam'
 import Spinner from '../components/Spinner'
 import Badge from '../components/Badge'
+import CodeBlock from '../components/CodeBlock'
+import { compileErrorLines } from '../utils/highlightLines'
 
 export default function StudentDetailPage() {
   const { id, matricula } = useParams()
@@ -134,9 +136,9 @@ export default function StudentDetailPage() {
 
             {sub.submission_id && expanded[sub.question_number] && (
               <div className="border-t border-gray-100">
-                <pre className="bg-gray-900 text-green-400 text-xs font-mono p-4 overflow-x-auto whitespace-pre-wrap leading-relaxed">
-                  {sub.code}
-                </pre>
+                <div className="px-4 pt-2 pb-4">
+                  <CodeBlock dark code={sub.code} highlight={compileErrorLines(sub.compile_error, sub.code)} />
+                </div>
 
                 {sub.compile_error && (
                   <div className="px-5 py-3 border-t border-gray-100">

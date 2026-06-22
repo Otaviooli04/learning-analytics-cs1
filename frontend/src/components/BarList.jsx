@@ -1,7 +1,5 @@
-// Lista de barras horizontais em CSS puro para rankings simples (erros, taxas).
-// Evita os problemas de sobreposição de rótulos do recharts em gráficos pequenos.
-// items: [{ label, value, display?, title?, color? }]
-// max: teto para a largura (ex.: 100 em %). Sem max, usa o maior value.
+// Barras horizontais em CSS para rankings simples.
+// items: [{ label, value, display?, title?, color? }]; max: teto da largura (default: maior value).
 export default function BarList({ items, max, color = '#7c3aed' }) {
   const top = max ?? Math.max(1, ...items.map(i => i.value))
   return (

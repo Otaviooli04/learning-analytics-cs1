@@ -7,12 +7,8 @@ from app.core.config import GEMINI_API_KEY
 
 
 def generate_cluster_insights(question_statement: str, clusters: list[dict]) -> list[dict]:
-    """Gera um insight pedagógico por cluster em UMA única chamada ao Gemini.
-
-    Cada item de `clusters` precisa de cluster_id, size, dominant_error e
-    representative_code. O batching mantém o nº de requisições em 1 por questão
-    (em vez de uma por cluster), reduzindo latência e risco de rate-limit (429).
-    """
+    """Gera um insight pedagógico por grupo em uma única chamada ao Gemini (uma
+    requisição por questão). Cada item precisa de cluster_id, size, dominant_error e representative_code."""
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY não configurada.")
     if not clusters:

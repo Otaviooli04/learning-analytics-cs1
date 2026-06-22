@@ -19,20 +19,11 @@ MIN_SUBMISSIONS = 3
 
 
 def _adaptive_min_cluster_size(n: int) -> int:
-    """min_cluster_size proporcional ao tamanho da turma.
-
-    Fixá-lo em 2 super-segmenta turmas maiores: no experimento de sensibilidade
-    (exp2) mcs≈5 é ótimo para n≈56, e na escalabilidade (exp3) n≈98 com mcs=2
-    estoura para 17–26 clusters. Cresce ~n/12 (≈5 em n=56, ≈8 em n=98), limitado
-    a [2, 8] para não colapsar turmas grandes nem exigir grupos grandes demais em
-    turmas pequenas. Heurística-base validada nos experimentos; afinável.
-    """
+    """min_cluster_size proporcional ao tamanho da turma, limitado a [2, 8]."""
     return max(2, min(8, round(n / 12)))
 
 
-# Tamanho mínimo de uma categoria de erro para procurar sub-padrões dentro dela.
-# Abaixo disso a categoria vira um grupo único: não há massa para dois sub-grupos.
-SUBCLUSTER_MIN = 6
+SUBCLUSTER_MIN = 6  # tamanho mínimo da categoria para procurar sub-padrões
 
 
 def _is_correct_category(cat: str) -> bool:
@@ -40,27 +31,16 @@ def _is_correct_category(cat: str) -> bool:
 
 
 def failure_signature(sub) -> Optional[tuple]:
-    """Assinatura comportamental da submissão: quais casos de teste passaram (1)
-    ou falharam (0), na ordem dos casos. None quando o código não chegou a
-    executar os casos (não compila ou questão sem casos de teste)."""
+    """Vetor de aprovação (1) / reprovação (0) por caso de teste; None se não executou."""
     if sub.compile_error or not sub.test_results:
         return None
     return tuple(1 if tr.passed else 0 for tr in sub.test_results)
 
 
 def two_level_labels(submissions: List["Submission"], error_categories: list[str]) -> np.ndarray:
-    """Agrupamento em dois níveis.
-
-    Nível 1: a categoria de erro das heurísticas (sinal confiável, validado contra
-    o avaliador de referência) separa as submissões. Nível 2: dentro de cada
-    categoria grande o bastante que de fato executou, agrupa por ASSINATURA DE
-    FALHA — por quais casos de teste a submissão falhou. Submissões que falham os
-    mesmos casos tendem a ter o mesmo defeito, então a assinatura separa bugs
-    distintos de forma determinística e interpretável: o próprio sintoma rotula o
-    grupo, sem projeção geométrica opaca.
-
-    Categorias pequenas e o grupo "Correto" ficam inteiros. Assinaturas raras (um
-    só aluno) e as sem execução juntam-se num grupo residual da categoria."""
+    """Nível 1: categoria de erro. Nível 2: dentro de categorias grandes, agrupa por
+    assinatura de falha. Categorias pequenas e "Correto" ficam inteiras; assinaturas
+    raras viram um grupo residual."""
     n = len(error_categories)
     labels = np.full(n, -1, dtype=int)
     by_cat: dict[str, list[int]] = {}
@@ -158,8 +138,7 @@ def cluster_question(
 
     embedded_viz = umap_viz.fit_transform(features)
 
-    # Nível 1: categoria de erro (heurística). Nível 2: assinatura de falha dos
-    # casos de teste. A projeção UMAP fica apenas como visualização no scatter.
+    # UMAP só alimenta o scatter; o agrupamento vem de two_level_labels.
     labels = two_level_labels(submissions, [s.error_category or "" for s in submissions])
 
     silhouette = None
@@ -271,11 +250,7 @@ def _build_tfidf_functional(
 
 
 def _function_features(submissions: List[Submission]) -> np.ndarray:
-    """Features comportamentais de função, derivadas de ast_functions.
-
-    n_user_functions (exceto main), tem_recursão, tem_param_ponteiro, max_param_count.
-    Submissões sem função (ex.: tudo no main) ficam com vetor ~zero.
-    """
+    """Features de função (nº de funções, recursão, ponteiro, máx. parâmetros) a partir de ast_functions."""
     rows = []
     for s in submissions:
         fns = getattr(s, "ast_functions", None) or []
