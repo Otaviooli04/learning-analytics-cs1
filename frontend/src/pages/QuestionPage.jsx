@@ -12,8 +12,10 @@ import {
 import Spinner from '../components/Spinner'
 import Badge from '../components/Badge'
 import BarList from '../components/BarList'
+import CodeBlock from '../components/CodeBlock'
 import ListControls from '../components/ListControls'
 import { shortError } from '../utils/errorLabels'
+import { compileErrorLines } from '../utils/highlightLines'
 
 const SUB_SORTS = [
   { value: 'situacao', label: 'Situação' },
@@ -173,6 +175,8 @@ export default function QuestionPage() {
   const hasInsights = insights?.some(x => x.insight)
   const isCorrect = (err) => /correto/i.test(err || '')
   const insightFor = (cid) => insights?.find(x => x.cluster_id === cid)?.insight || ''
+  // Linhas problemáticas do código representativo (mesmo canal dos insights).
+  const highlightFor = (cid) => insights?.find(x => x.cluster_id === cid)?.highlight_lines || []
 
   // Situação da submissão (rótulo único p/ filtrar e ordenar a aba Respostas).
   const subStatus = (s) =>
@@ -360,9 +364,7 @@ export default function QuestionPage() {
                         {s.actionable_feedback && (
                           <p className="text-xs text-gray-500 italic">{s.actionable_feedback}</p>
                         )}
-                        <pre className="text-xs font-mono bg-gray-50 rounded-lg p-3 overflow-x-auto text-gray-600 whitespace-pre-wrap max-h-48">
-                          {s.code}
-                        </pre>
+                        <CodeBlock code={s.code} highlight={compileErrorLines(s.compile_error, s.code)} />
                         {s.compile_error && (
                           <pre className="text-xs font-mono bg-red-50 rounded-lg p-3 text-red-600 overflow-x-auto whitespace-pre-wrap">
                             {s.compile_error}
@@ -462,6 +464,7 @@ export default function QuestionPage() {
                     ? Math.round((c.size / clusterResult.total_submissions) * 100)
                     : 0
                   const insight = insightFor(c.cluster_id)
+                  const hot = highlightFor(c.cluster_id)
                   return (
                     <div key={c.cluster_id} className="bg-white rounded-xl border border-gray-200 p-5">
                       <div className="flex items-center gap-2 mb-3">
@@ -508,6 +511,11 @@ export default function QuestionPage() {
                             >
                               {openCode[c.cluster_id] ? '− Ocultar' : '+ Ver'} código representativo
                             </button>
+                            {hot.length > 0 && (
+                              <span className="text-xs text-red-500">
+                                · {hot.length === 1 ? `linha ${hot[0]}` : `linhas ${hot.join(', ')}`} em destaque
+                              </span>
+                            )}
                             {c.representative_matricula && (
                               <span className="text-xs text-gray-400">
                                 · de{' '}
@@ -521,9 +529,7 @@ export default function QuestionPage() {
                             )}
                           </div>
                           {openCode[c.cluster_id] && (
-                            <pre className="mt-2 text-xs font-mono bg-gray-50 rounded-lg p-3 overflow-x-auto text-gray-600 max-h-48 whitespace-pre-wrap">
-                              {c.representative_code}
-                            </pre>
+                            <CodeBlock code={c.representative_code} highlight={hot} />
                           )}
                         </div>
                       )}

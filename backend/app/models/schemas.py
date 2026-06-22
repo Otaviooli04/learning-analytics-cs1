@@ -384,6 +384,7 @@ class ClusterInsight(BaseModel):
     size: int
     dominant_error: str
     insight: str
+    highlight_lines: List[int] = []
 
 
 class InsightsResponse(BaseModel):

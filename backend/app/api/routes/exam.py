@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_professor
 from app.auth.ownership import get_exam_or_404, get_question_or_404
+from app.engine.error_locator import parse_compile_error_lines
 from app.llm.feedback_generator import generate_cluster_insights
 from app.ml.cluster import FeatureStrategy, cluster_question
 from app.models.database import get_db
@@ -76,6 +77,19 @@ def _failing_summary(submissions) -> dict:
         else:
             out[label] = ("falha os casos " + ", ".join(map(str, failed)), len(failed))
     return out
+
+
+def _highlight_for(qc, llm_lines) -> list:
+    """Linhas a destacar no código representativo do grupo. Erro de COMPILAÇÃO usa o
+    parse determinístico do gcc (autoritativo, linha exata); senão, usa a atribuição
+    do Gemini (erro de lógica). Sem representativo → nada a destacar."""
+    rep = qc.representative
+    if rep is None:
+        return []
+    if rep.compile_error:
+        return parse_compile_error_lines(
+            rep.compile_error, max_line=len((rep.code or "").split("\n")))
+    return llm_lines or []
 
 
 # ── público: alunos precisam carregar a prova antes de submeter ──────────────
@@ -378,7 +392,8 @@ def get_groups(
     ]
     insights = [
         {"cluster_id": qc.cluster_label, "size": qc.size,
-         "dominant_error": qc.dominant_error, "insight": qc.insight or ""}
+         "dominant_error": qc.dominant_error, "insight": qc.insight or "",
+         "highlight_lines": _highlight_for(qc, qc.highlight_lines)}
         for qc in clusters_db
     ]
     return {
@@ -429,6 +444,7 @@ def run_insights(
             qc = by_label.get(item["cluster_id"])
             if qc is not None:
                 qc.insight = item["insight"]
+                qc.highlight_lines = _highlight_for(qc, item.get("highlight_lines"))
         db.commit()
 
     return InsightsResponse(
@@ -439,6 +455,7 @@ def run_insights(
                 size=qc.size,
                 dominant_error=qc.dominant_error,
                 insight=qc.insight or "",
+                highlight_lines=_highlight_for(qc, qc.highlight_lines),
             )
             for qc in clusters_db
         ],

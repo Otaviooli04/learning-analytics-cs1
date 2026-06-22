@@ -1,14 +1,8 @@
-"""Análise estática de código C tolerante a erros.
+"""Análise estática de C com tree-sitter, tolerante a erros de sintaxe.
 
-Usa tree-sitter (parser incremental) em vez de pycparser: produz uma árvore
-mesmo quando o código não compila, extraindo estruturas de controle e funções
-de submissões com erros de sintaxe — o caso mais comum em provas de CS1.
-
-Contrato de `extract_control_flow` (mantido para o restante do sistema):
-    {"success": True, "structures": [...], "functions": [...], "parse_ok": bool}
-`parse_ok` é False quando a árvore contém nós de erro (código não compila), mas
-`structures`/`functions` ainda trazem o que foi possível extrair.
-"""
+`extract_control_flow` retorna {"success", "structures", "functions", "risky_loops",
+"parse_ok"}; parse_ok=False quando a árvore tem nós de erro, mas structures/functions
+ainda trazem o que foi extraído."""
 
 from __future__ import annotations
 
@@ -61,7 +55,7 @@ def extract_control_flow(source_code: str) -> dict:
 
 
 def _walk(node: Node):
-    """Pré-ordem (ordem de documento), igual ao visitor antigo do pycparser."""
+    """Percurso em pré-ordem (ordem de documento)."""
     yield node
     for child in node.children:
         yield from _walk(child)
@@ -176,11 +170,8 @@ def _returns_value(body: Node | None) -> bool:
 
 
 def _risky_loop(loop: Node) -> dict | None:
-    """Detecta off-by-one: laço com limite '<=' que indexa um vetor pela variável de controle.
-
-    Restrito a '<=' (limite superior inclusivo) — laços reversos com '>=' até 0 costumam
-    ser corretos, então não são sinalizados para evitar falso-positivo.
-    """
+    """Off-by-one: laço com limite '<=' que indexa vetor pela variável de controle
+    (só '<=' inclusivo, para evitar falso-positivo em laços reversos)."""
     condition = loop.child_by_field_name("condition")
     if condition is None:
         return None

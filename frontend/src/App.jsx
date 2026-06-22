@@ -5,8 +5,7 @@ import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import Spinner from './components/Spinner'
 
-// Páginas carregadas sob demanda: mantém o bundle inicial leve e isola o
-// recharts (telas de gráfico) em chunks próprios baixados só quando acessados.
+// Páginas em lazy-load para manter o bundle inicial leve.
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const UploadPage = lazy(() => import('./pages/UploadPage'))

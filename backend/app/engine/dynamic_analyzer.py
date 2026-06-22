@@ -4,14 +4,7 @@ import os
 
 
 def _normalize_ws(text: str) -> str:
-    """Normaliza espaços para a comparação de saída, tolerando alinhamento.
-
-    Colapsa espaços internos de cada linha (ex.: `%4d` imprime "   1    2",
-    enquanto a saída esperada extraída do PDF junta tokens com 1 espaço) e
-    descarta linhas em branco nas bordas. Preserva as quebras de linha, pois a
-    estrutura de linhas é significativa (matrizes, listas). Afrouxa apenas o
-    formato horizontal — ordem e número de linhas continuam exigidos.
-    """
+    """Colapsa espaços horizontais e apara linhas em branco nas bordas, preservando quebras de linha."""
     lines = [" ".join(line.split()) for line in text.splitlines()]
     while lines and not lines[0]:
         lines.pop(0)
@@ -20,19 +13,12 @@ def _normalize_ws(text: str) -> str:
     return "\n".join(lines)
 
 
-# Backup do subprocess.run; o guarda real do laço infinito é o "timeout 5" DENTRO
-# do container. Folga generosa para o startup do container sob carga (no lote, vários
-# `docker run` em sequência deixam o daemon lento e geram TIMEOUT espúrio).
-_RUN_BACKUP_TIMEOUT_S = 15
+_RUN_BACKUP_TIMEOUT_S = 15  # backup do subprocess; o limite real é o "timeout 5" no container
 
 
 def _run_once(run_cmd: list[str], stdin: str):
-    """Roda o binário no container uma vez.
-
-    Retorna ("ok", saida), ("timeout", None) quando o PRÓPRIO programa estourou os
-    5s (returncode 124 do `timeout` do container = provável laço infinito do aluno),
-    ou ("hiccup", None) quando o backup do subprocess estourou — sinal de Docker
-    lento/sob carga, não do código do aluno (vale uma nova tentativa)."""
+    """Executa o binário no container. Retorna ("ok", saida), ("timeout", None) em
+    laço infinito (returncode 124) ou ("hiccup", None) quando o Docker está lento."""
     try:
         r = subprocess.run(run_cmd, input=stdin, capture_output=True,
                            text=True, timeout=_RUN_BACKUP_TIMEOUT_S)
@@ -53,26 +39,15 @@ def compile_and_run(source_code: str, test_cases: list[dict]) -> dict:
             "docker", "run", "--rm", "--network", "none",
             "-v", f"{temp_dir}:/src", "-w", "/src",
             "gcc:latest",
-            # -lm: linka a libm. Problemas de CS1 usam sqrt/pow/fabs (math.h);
-            # sem isso o gcc dá "undefined reference" e o sistema reprova código
-            # correto que o CodeRunner aceita (ele linka math por padrão).
-            # -ftrivial-auto-var-init=zero: zera variáveis locais não inicializadas,
-            # alinhando o comportamento ao do CodeRunner (que zera por acaso). Sem
-            # isso, código com UB produz lixo dependente do ambiente e reprova
-            # submissões que o avaliador de referência aceitou.
+            # -lm linka a libm; -ftrivial-auto-var-init=zero zera locais não inicializadas (alinha ao CodeRunner)
             "gcc", "-Wall", "-ftrivial-auto-var-init=zero",
             "student_code.c", "-o", "exe.out", "-lm",
         ]
-        # Compilar código de CS1 leva <1s; um timeout aqui é quase sempre um
-        # engasgo do Docker (container frio / daemon sob carga durante o lote),
-        # não o compilador travando. Uma nova tentativa resolve sem perder a
-        # submissão; se persistir, devolvemos um veredito limpo em vez de deixar
-        # o TimeoutExpired derrubar a avaliação como "erro interno".
         try:
             compile_result = subprocess.run(
                 compile_cmd, capture_output=True, text=True, timeout=30)
         except subprocess.TimeoutExpired:
-            try:
+            try:  # timeout aqui costuma ser lentidão do Docker, não o gcc: nova tentativa
                 compile_result = subprocess.run(
                     compile_cmd, capture_output=True, text=True, timeout=60)
             except subprocess.TimeoutExpired:
@@ -105,9 +80,6 @@ def compile_and_run(source_code: str, test_cases: list[dict]) -> dict:
                 "all_tests_passed": None,
             }
 
-        # "timeout 5" DENTRO do container mata o laço infinito do aluno e o --rm
-        # encerra o container. _run_once distingue isso (returncode 124) de uma
-        # lentidão do Docker, que merece uma nova tentativa.
         run_cmd = [
             "docker", "run", "--rm", "--network", "none", "-i",
             "-v", f"{temp_dir}:/src", "-w", "/src",
@@ -116,10 +88,7 @@ def compile_and_run(source_code: str, test_cases: list[dict]) -> dict:
         test_results = []
         for tc in test_cases:
             status, out = _run_once(run_cmd, tc["input"])
-            if status == "hiccup":
-                # Docker travou (não é o código do aluno): 1 nova tentativa antes de
-                # cravar TIMEOUT, para um engasgo do daemon durante o lote não
-                # reprovar código correto.
+            if status == "hiccup":  # lentidão do Docker: 1 nova tentativa
                 status, out = _run_once(run_cmd, tc["input"])
             actual = out if status == "ok" else "TIMEOUT"
             expected = tc["expected_output"].strip()

@@ -158,13 +158,8 @@ def _check_function_violation(ctx: DiagnosisContext) -> dict | None:
 
 
 def _check_float_precision(ctx: DiagnosisContext) -> dict | None:
-    """Falhas em que a saída tem os valores certos, só com casas decimais erradas.
-
-    Captura o erro clássico de CS1 (ex.: `%.2f` em vez de `%.3f`) ANTES do
-    fallback genérico de "Saída Incorreta". Só dispara se TODOS os testes que
-    falharam forem diferenças puramente de precisão: se houver qualquer divergência
-    de conteúdo/valor, deixa o checker de testes classificar como lógica incorreta.
-    """
+    """Saída com valores certos mas casas decimais erradas. Só dispara se todas as
+    falhas forem puramente de precisão; senão deixa o checker de testes classificar."""
     if not ctx.dyn_success or not ctx.test_results:
         return None
     failed = [r for r in ctx.test_results if not r["passed"]]
@@ -341,12 +336,8 @@ def _decimals(token: str) -> int | None:
 
 
 def _precision_mismatch(expected: str, actual: str) -> tuple[int, int] | None:
-    """Diferença SÓ de casas decimais entre esperado e obtido (valores iguais).
-
-    Retorna (casas_esperadas, casas_encontradas) do primeiro token divergente, ou
-    None se houver qualquer diferença de conteúdo (token não-numérico, contagem de
-    tokens distinta, ou valores numéricos realmente diferentes).
-    """
+    """(casas_esperadas, casas_encontradas) do 1º token que difere só em precisão;
+    None se houver qualquer diferença de conteúdo/valor."""
     exp_toks, act_toks = expected.split(), actual.split()
     if len(exp_toks) != len(act_toks):
         return None
