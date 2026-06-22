@@ -5,15 +5,8 @@ from app.core.config import GEMINI_API_KEY
 
 def extract_exam_structure(raw_text: str, *, file_bytes: bytes = None,
                            mime_type: str = None) -> dict:
-    """Extrai a estrutura da prova via Gemini.
-
-    Quando o original é um PDF (`file_bytes` + mime_type application/pdf), envia o
-    arquivo NATIVO ao modelo multimodal em vez do texto achatado. Isso preserva o
-    layout das tabelas de exemplo (matrizes, colunas alinhadas, casas decimais) —
-    que `pymupdf.get_text()` lineariza e embaralha — elevando a fidelidade dos
-    test cases sem depender de extração por geometria. Para DOCX/fallback, usa o
-    texto extraído.
-    """
+    """Extrai a estrutura da prova via Gemini. Para PDF, envia o arquivo nativo ao
+    modelo multimodal (preserva o layout das tabelas); para DOCX/fallback, usa o texto."""
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY não configurada.")
 

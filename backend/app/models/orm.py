@@ -104,6 +104,9 @@ class QuestionCluster(Base):
     size = Column(Integer)
     dominant_error = Column(String, default="")
     insight = Column(Text, default="")
+    # Linhas (1-based) do código representativo a destacar p/ o professor: erro de
+    # compilação → parse do gcc; erro de lógica → atribuição do Gemini.
+    highlight_lines = Column(JSON, default=list)
     representative_submission_id = Column(Integer, ForeignKey("submissions.id"), nullable=True)
 
     question = relationship("Question")

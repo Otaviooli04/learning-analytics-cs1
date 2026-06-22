@@ -105,9 +105,7 @@ def _process_bulk_job(db: Session, job_id: int, exam_id: int, entries: list[dict
                    result={'total': len(entries), 'processed': processed,
                            'errors': errors, 'items': items})
 
-    # Agrupamento automático: com todas as submissões já avaliadas, agrupa cada
-    # questão por padrão de dificuldade (barato, sem LLM). Os insights seguem sob
-    # demanda. É best-effort: falha numa questão não derruba o job nem as demais.
+    # Agrupamento automático por questão (best-effort; insights ficam sob demanda).
     update_job(db, job_id, stage="Agrupando por dificuldade")
     _cluster_exam_questions(db, exam_id)
 

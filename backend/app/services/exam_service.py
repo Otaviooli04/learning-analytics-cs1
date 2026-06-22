@@ -213,8 +213,7 @@ def get_exam_results(exam: Exam) -> dict:
             for cat, count in cat_counter.most_common()
         ]
 
-        # Item 1 — falha por test case: agrega os resultados por (entrada, saída
-        # esperada) de quem chegou a executar (submissões que compilaram).
+        # Falha por caso de teste: agrega por (entrada, saída esperada) de quem executou.
         tc_total: Counter = Counter()
         tc_failed: Counter = Counter()
         tc_meta: dict = {}
@@ -242,7 +241,7 @@ def get_exam_results(exam: Exam) -> dict:
             key=lambda d: (-d["fail_rate"], -d["failed"]),
         )
 
-        # Item 3 — erros de compilação mais comuns (assinatura normalizada).
+        # Erros de compilação mais comuns (assinatura normalizada).
         ce_counter: Counter = Counter()
         ce_matriculas: dict = {}
         for s in subs:
@@ -256,7 +255,7 @@ def get_exam_results(exam: Exam) -> dict:
         ]
 
         passed_count = sum(1 for s in subs if s.all_tests_passed)
-        # Item 2 — "quase lá": passou em algum caso mas não em todos.
+        # Passou em algum caso mas não em todos.
         partial_count = sum(
             1 for s in subs
             if not s.all_tests_passed and s.test_results
@@ -299,7 +298,7 @@ def get_exam_results(exam: Exam) -> dict:
 
 
 def get_exam_students(exam: Exam) -> dict:
-    # latest submission per (matricula, question_number)
+    # última submissão por (matrícula, questão)
     student_map: dict[str, dict[str, object]] = {}
     for q in exam.questions:
         for s in q.submissions:

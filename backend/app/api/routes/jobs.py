@@ -29,8 +29,7 @@ def list_active_jobs(
     db: Session = Depends(get_db),
     professor: Professor = Depends(get_current_professor),
 ):
-    """Jobs ainda em andamento do professor — alimenta o indicador global de
-    progresso, que o usuário acompanha enquanto navega livremente pelo sistema."""
+    """Jobs ainda em andamento do professor (alimenta o indicador global de progresso)."""
     jobs = (
         db.query(ProcessingJob)
         .filter(

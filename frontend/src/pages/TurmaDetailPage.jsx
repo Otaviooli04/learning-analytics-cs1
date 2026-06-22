@@ -57,6 +57,8 @@ export default function TurmaDetailPage() {
       await deleteExam(deleteExamTarget.id)
       setTurma(t => ({ ...t, exams: t.exams.filter(e => e.id !== deleteExamTarget.id) }))
       setDeleteExamTarget(null)
+      // Rebusca os analytics (agregados no servidor) após remover a prova.
+      getTurmaAnalytics(turmaId).then(({ data: a }) => setAnalytics(a)).catch(() => {})
     } catch {
       setError('Erro ao excluir a prova.')
     } finally {
